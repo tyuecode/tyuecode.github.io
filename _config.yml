@@ -14,13 +14,13 @@ author:
 theme: minima  # 或你的主题名称
 
 # 插件
-#plugins:
- # - jekyll-feed
-  #- jekyll-seo-tag
+plugins:
+  - jekyll-feed
+  - jekyll-seo-tag
 
 # 评论系统（可选）
 # 推荐：Gitalk, Utterances, Disqus
-#comments:
-#  provider: utterances
- # utterances:
-  #  repo: 你的用户名/你的用户名.github.io
+comments:
+  provider: utterances
+  utterances:
+  repo: tyuecode/tyuecode.github.io
