@@ -1,0 +1,73 @@
+---
+# 布局的前置元数据，可被Jekyll解析
+layout: default  # 继承默认布局（minima主题核心布局，复用header/footer）
+---
+
+<!-- 文章主体容器 -->
+<main class="post-content" aria-label="Content">
+  <div class="wrapper">
+    <!-- 文章头部信息：标题、日期、分类、标签 -->
+    <article class="post h-entry" itemscope itemtype="http://schema.org/BlogPosting">
+      <!-- 文章标题 -->
+      <header class="post-header">
+        <h1 class="post-title p-name" itemprop="name headline">
+          {{ page.title | escape }}  <!-- 渲染文章标题，escape防止XSS -->
+        </h1>
+        
+        <!-- 文章元信息：日期、分类、标签 -->
+        <div class="post-meta">
+          <!-- 发布日期 -->
+          <time class="dt-published" datetime="{{ page.date | date_to_xmlschema }}" itemprop="datePublished">
+            {{ page.date | date: "%Y年%m月%d日 %H:%M" }}  <!-- 格式化日期为中文显示 -->
+          </time>
+          
+          <!-- 文章分类（如果有） -->
+          {% if page.categories.size > 0 %}
+            <span class="post-categories">
+              分类：
+              {% for category in page.categories %}
+                <a href="{{ site.baseurl }}/categories/{{ category | slugify }}">{{ category }}</a>
+                {% unless forloop.last %}, {% endunless %}  <!-- 分类之间加逗号，最后一个不加 -->
+              {% endfor %}
+            </span>
+          {% endif %}
+          
+          <!-- 文章标签（如果有） -->
+          {% if page.tags.size > 0 %}
+            <span class="post-tags">
+              标签：
+              {% for tag in page.tags %}
+                <a href="{{ site.baseurl }}/tags/{{ tag | slugify }}">{{ tag }}</a>
+                {% unless forloop.last %}, {% endunless %}
+              {% endfor %}
+            </span>
+          {% endif %}
+        </div>
+      </header>
+
+      <!-- 文章正文内容 -->
+      <div class="post-content e-content" itemprop="articleBody">
+        {{ content }}  <!-- 渲染文章Markdown解析后的正文 -->
+      </div>
+
+      <!-- 评论区（Utterances，对应_config.yml的配置） -->
+      {% if page.comments != false %}  <!-- 若文章未关闭评论则显示 -->
+        <div class="post-comments">
+          <h3>评论区</h3>
+          <script src="https://utteranc.es/client.js"
+                  repo="{{ site.comments.utterances.repo }}"
+                  issue-term="pathname"
+                  label="comment"
+                  theme="github-light"
+                  crossorigin="anonymous"
+                  async>
+          </script>
+        </div>
+      {% endif %}
+
+      <!-- 结构化数据标记（SEO优化） -->
+      <meta itemprop="author" content="{{ site.author.name }}">
+      <meta itemprop="description" content="{{ page.excerpt | default: site.description | strip_html | truncate: 160 }}">
+    </article>
+  </div>
+</main>
