@@ -12,12 +12,7 @@ author:
   github: "tyuecode"
 
 # 主题设置（根据主题不同而异）
-theme: minima
-minima:
-  skin: auto  # 自动跟随系统明暗主题（可选：light/dark）
-  social_links:  # 导航栏添加社交链接（minima v3+支持）
-    - { platform: github, user_url: "https://github.com/tyuecode" }
-    - { platform: email, user_url: "mailto:1252107428@qq.com" }
+theme: jekyll-theme-minimal
 
 # 构建设置
 markdown: kramdown  # 使用的Markdown解析器
