@@ -1,24 +1,49 @@
 # 基本配置
-title: tyuecode's blog
-description: This is an ordinary blog
+title: "TY的博客"
+description: "分享编程和生活"
 baseurl: ""  # 如果部署在子路径，填写子路径
 url: "https://tyuecode.github.io"
 
 # 作者信息
 author:
-  name: tyue
+  name: TY
   email: 1252107428@qq.com
-  github: tyuecode
+  avatar: "/asset/MiLogal.jpg"  # 作者头像路径
 
 # 主题设置（根据主题不同而异）
 theme: minima  # 或你的主题名称
 
+# 构建设置
+markdown: kramdown  # 使用的Markdown解析器
+highlighter: rouge  # 代码高亮引擎
+timezone: "Asia/Shanghai" # 时区设置
+
+source: "."              # 源文件目录（通常是项目根目录）
+destination: "_site"     # 构建输出目录
+layouts_dir: "_layouts"  # 布局模板目录
+includes_dir: "_includes"  # 包含文件目录（header、footer等）
+
+
+# 默认设置
+defaults:
+  - scope:
+      path: ""         # 空表示所有路径
+      type: "posts"    # 仅对posts类型的文件生效
+    values:
+      layout: "post"   # 默认使用post布局
+      comments: true   # 默认开启评论
+      share: true      # 默认开启分享
+      
+  - scope:
+      path: "pages"    # 对pages目录下的文件生效
+    values:
+      layout: "page"   # 默认使用page布局   
 # 插件
 plugins:
-  - jekyll-feed
-  - jekyll-seo-tag
-
-# 评论系统（可选）
+  - jekyll-feed       # 生成RSS/Atom订阅源
+  - jekyll-sitemap    # 生成sitemap.xml
+  - jekyll-seo-tag    # SEO优化标签
+  - jekyll-paginate   # 分页功能
 # 推荐：Gitalk, Utterances, Disqus
 comments:
   provider: utterances
