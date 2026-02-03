@@ -1,24 +1,30 @@
 ---
-title: 首页
+layout: home
+title: 主页
 ---
 
-# 欢迎来到我的 Minimal 站点
+# 欢迎来到我的网站
 
-这是基于 jekyll-theme-minimal 的 GitHub Pages 站点。
+## 最新文章
 
-## 导航
+<ul>
+  {% for post in site.posts limit:5 %}
+    <li>
+      <a href="{{ post.url | relative_url }}">{{ post.title }}</a>
+      <span class="post-date">{{ post.date | date: "%Y年%m月%d日" }}</span>
+    </li>
+  {% endfor %}
+</ul>
 
-- [关于我](/about)
-- [我的 GitHub](https://github.com/你的用户名)
+<p><a href="{{ '/archive' | relative_url }}">查看所有文章</a></p>
 
-## 示例内容
+## 关于我
 
-这里可以写你的介绍、项目、博客入口等。
+我是一名开发者/写作者
 
-- 项目1
-- 项目2
-- 项目3
+## 项目
+暂无
 
----
 
-© 2026 你的名字 | 使用 Minimal 主题
+您可以通过以下方式联系我：
+- 邮箱：{{ site.email }}
