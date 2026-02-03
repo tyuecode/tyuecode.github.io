@@ -8,10 +8,16 @@ url: "https://tyuecode.github.io"
 author:
   name: TY
   email: 1252107428@qq.com
-  avatar: "/asset/MiLogal.jpg"  # 作者头像路径
+  avatar: "/assets/images/MiLogal.jpg"  # 作者头像路径
+  github: "tyuecode"
 
 # 主题设置（根据主题不同而异）
-theme: minima  # 或你的主题名称
+theme: minima
+minima:
+  skin: auto  # 自动跟随系统明暗主题（可选：light/dark）
+  social_links:  # 导航栏添加社交链接（minima v3+支持）
+    - { platform: github, user_url: "https://github.com/tyuecode" }
+    - { platform: email, user_url: "mailto:1252107428@qq.com" }
 
 # 构建设置
 markdown: kramdown  # 使用的Markdown解析器
@@ -22,6 +28,7 @@ source: "."              # 源文件目录（通常是项目根目录）
 destination: "_site"     # 构建输出目录
 layouts_dir: "_layouts"  # 布局模板目录
 includes_dir: "_includes"  # 包含文件目录（header、footer等）
+assets_dir: "assets"  # 静态资源目录
 
 
 # 默认设置
@@ -33,6 +40,7 @@ defaults:
       layout: "post"   # 默认使用post布局
       comments: true   # 默认开启评论
       share: true      # 默认开启分享
+      author: TY
       
   - scope:
       path: "pages"    # 对pages目录下的文件生效
@@ -48,4 +56,7 @@ plugins:
 comments:
   provider: utterances
   utterances:
-  repo: tyuecode/tyuecode.github.io
+    repo: tyuecode/tyuecode.github.io  # 修正缩进（YAML对缩进敏感）
+    issue_term: pathname  # 按页面路径匹配评论
+    label: comment 💬     # 评论对应的GitHub Issue标签
+    theme: github-light  # 评论区主题（可选：github-dark）
