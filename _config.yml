@@ -1,6 +1,8 @@
 # 基本配置
 title: "TY的博客"
 description: "分享编程和生活"
+logo: /assets/img/MiLogal.jpg
+show_downloads: true
 baseurl: ""  # 如果部署在子路径，填写子路径
 url: "https://tyuecode.github.io"
 
