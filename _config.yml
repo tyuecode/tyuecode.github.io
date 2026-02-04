@@ -8,10 +8,10 @@ url: "https://tyuecode.github.io"
 author:
   name: TY
   email: 1252107428@qq.com
-  avatar: "/assets/images/MiLogal.jpg"  # 作者头像路径
+  avatar: "/assets/img/MiLogal.jpg"  # 作者头像路径
   github: "tyuecode"
 
-# 主题设置（根据主题不同而异）
+# 主题设置
 theme: jekyll-theme-minimal
 
 # 构建设置
@@ -20,7 +20,6 @@ highlighter: rouge  # 代码高亮引擎
 timezone: "Asia/Shanghai" # 时区设置
 
 source: "."              # 源文件目录（通常是项目根目录）
-destination: "_site"     # 构建输出目录
 layouts_dir: "_layouts"  # 布局模板目录
 includes_dir: "_includes"  # 包含文件目录（header、footer等）
 assets_dir: "assets"  # 静态资源目录
