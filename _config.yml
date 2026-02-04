@@ -1,7 +1,7 @@
 # 基本配置
 title: "TY的博客"
 description: "分享编程和生活"
-logo: /assets/img/MiLogal.jpg
+logo: /assets/img/MiLogo.jpg
 show_downloads: true
 baseurl: ""  # 如果部署在子路径，填写子路径
 url: "https://tyuecode.github.io"
@@ -20,6 +20,7 @@ theme: jekyll-theme-minimal
 markdown: kramdown  # 使用的Markdown解析器
 highlighter: rouge  # 代码高亮引擎
 timezone: "Asia/Shanghai" # 时区设置
+lang: zh-CN #默认为中文
 
 source: "."              # 源文件目录（通常是项目根目录）
 layouts_dir: "_layouts"  # 布局模板目录
