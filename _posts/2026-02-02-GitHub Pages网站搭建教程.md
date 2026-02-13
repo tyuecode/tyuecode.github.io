@@ -1,7 +1,7 @@
 ---
 layout: post
 title: "Jekyll+GitHub Pages网站搭建指南"
-date: 2026-02-02 10:00:00 +0800
+date: 2026-02-02
 categories: [博客教程]  # 精准分类（两级）
 tags: [github, jekyll, 静态博客]     # 细分标签
 excerpt: "本文讲解搭建Jekyll+GitHub Pages博客，包括配置、部署、个性化全流程。"  # 自定义摘要
