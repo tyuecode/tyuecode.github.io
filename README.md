@@ -5,10 +5,9 @@
 ## 目录结构
 
 ```
-_config.yml                       # 站点配置（标题/作者/主题/插件/SEO/评论/分页）
+_config.yml                       # 站点配置（标题/作者/主题/插件/SEO/分页）
 _layouts/
   default.html                    # 基础布局（head/header/section/footer）
-  post.html                       # 文章布局（继承 default，含评论区）
 _includes/
   head-custom.html                # 自定义 <head>（favicon 等）
 _posts/                           # 博客文章（文件名格式 YYYY-MM-DD-slug.md）
@@ -51,5 +50,4 @@ bundle exec jekyll serve
 - RSS 订阅：`/feed.xml`
 - 站点地图：`/sitemap.xml`
 - SEO：`jekyll-seo-tag` 自动生成 canonical / Open Graph / Twitter 卡片
-- 评论：Utterances（基于 GitHub Issues，需在仓库安装 Utterances 应用）
 - 分页：`jekyll-paginate`，每页 5 篇
