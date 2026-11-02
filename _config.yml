@@ -2,15 +2,15 @@
 title: "TY的博客"
 description: "分享编程和生活"
 logo: /assets/img/MiLogo.jpg
-show_downloads: true
-baseurl: ""  # 如果部署在子路径，填写子路径
-url: "https://tyuecode.github.io"
+show_downloads: false
+baseurl: ""  # 部署在根域名，留空
+url: "https://tangyue.me"  # 实际自定义域名（tyuecode.github.io 会跳转至此）
 
 # 作者信息
 author:
   name: TY
   email: 1252107428@qq.com
-  avatar: "/assets/img/MiLogal.jpg"  # 作者头像路径
+  avatar: "/assets/img/MiLogo.jpg"  # 作者头像路径（修正拼写 MiLogal->MiLogo）
   github: "tyuecode"
 
 # 主题设置
@@ -27,6 +27,9 @@ layouts_dir: "_layouts"  # 布局模板目录
 includes_dir: "_includes"  # 包含文件目录（header、footer等）
 assets_dir: "assets"  # 静态资源目录
 
+# 分页（jekyll-paginate）：每页文章数
+paginate: 5
+paginate_path: "/page:num/"
 
 # 默认设置
 defaults:
@@ -35,25 +38,23 @@ defaults:
       type: "posts"    # 仅对posts类型的文件生效
     values:
       layout: "post"   # 默认使用post布局
-      comments: true   # 默认开启评论
-      share: true      # 默认开启分享
       author: TY
-      
+
   - scope:
       path: "pages"    # 对pages目录下的文件生效
     values:
-      layout: "page"   # 默认使用page布局   
+      layout: "page"   # 默认使用page布局
 # 插件
 plugins:
   - jekyll-feed       # 生成RSS/Atom订阅源
   - jekyll-sitemap    # 生成sitemap.xml
   - jekyll-seo-tag    # SEO优化标签
   - jekyll-paginate   # 分页功能
-# 推荐：Gitalk, Utterances, Disqus
+# 评论：Utterances（需先在 GitHub 给 issues 仓库安装 Utterances 应用）
 comments:
   provider: utterances
   utterances:
-    repo: tyuecode/tyuecode.github.io  # 修正缩进（YAML对缩进敏感）
+    repo: tyuecode/tyuecode.github.io  # 存放评论 Issue 的仓库
     issue_term: pathname  # 按页面路径匹配评论
     label: comment 💬     # 评论对应的GitHub Issue标签
     theme: github-light  # 评论区主题（可选：github-dark）
