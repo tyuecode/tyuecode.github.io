@@ -1,12 +1,14 @@
 <!DOCTYPE html>
-<html lang="{{ site.lang | default: "en-US" }}">
+<html lang="{{ site.lang | default: "zh-CN" }}">
   <head>
     <meta charset="UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1">
 
 {% seo %}
-    <link rel="stylesheet" href="{{ "/assets/css/style.css?v=" | append: site.github.build_revision | relative_url }}">
+    <link rel="icon" href="{{ "/assets/img/MiLogo.jpg" | relative_url }}" type="image/jpeg">
+    <link rel="alternate" type="application/rss+xml" title="{{ site.title }}" href="{{ "/feed.xml" | relative_url }}">
+    <link rel="stylesheet" href="{{ "/assets/css/style.css?v=" | append: site.time | date: "%s" | relative_url }}">
     <!--[if lt IE 9]>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html5shiv/3.7.3/html5shiv.min.js"></script>
     <![endif]-->
@@ -45,6 +47,13 @@
 
       </section>
       <footer>
+        <p>
+          <a href="{{ "/" | absolute_url }}">首页</a> ·
+          <a href="{{ "/about/" | relative_url }}">关于</a> ·
+          <a href="{{ "/tags/" | relative_url }}">标签</a> ·
+          <a href="{{ "/feed.xml" | relative_url }}">RSS</a>
+        </p>
+        <p>&copy; {{ site.time | date: "%Y" }} {{ site.author.name | default: site.title }}. Powered by Jekyll.</p>
         {% if site.github.is_project_page %}
         <p>This project is maintained by <a href="{{ site.github.owner_url }}">{{ site.github.owner_name }}</a></p>
         {% endif %}
