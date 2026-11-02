@@ -27,10 +27,6 @@ layouts_dir: "_layouts"  # 布局模板目录
 includes_dir: "_includes"  # 包含文件目录（header、footer等）
 assets_dir: "assets"  # 静态资源目录
 
-# 分页（jekyll-paginate）：每页文章数
-paginate: 5
-paginate_path: "/page:num/"
-
 # 默认设置
 defaults:
   - scope:
@@ -49,7 +45,6 @@ plugins:
   - jekyll-feed       # 生成RSS/Atom订阅源
   - jekyll-sitemap    # 生成sitemap.xml
   - jekyll-seo-tag    # SEO优化标签
-  - jekyll-paginate   # 分页功能
 # 评论：Utterances（需先在 GitHub 给 issues 仓库安装 Utterances 应用）
 comments:
   provider: utterances
