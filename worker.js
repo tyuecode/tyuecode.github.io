@@ -1,25 +1,10 @@
 /* 生成 worker：把分析 + 笔触 + 时间轴跑在后台线程，避免界面卡死 */
-/* core.js 同样会被 CDN 强缓存，必须把本 worker 的查询串透传下去，
- * 否则会出现「新 worker + 旧 core」，风格依然失效。 */
+/* core.js 同样会被 CDN 强缓存，把本 worker 的查询串透传下去，
+ * 避免出现「新 worker + 旧 core」。 */
 importScripts('core.js' + (self.location && self.location.search ? self.location.search : ''));
-
-/* 握手：新版会回自己的 build 与风格数，旧版不会。
- * 页面用它判断浏览器有没有命中缓存里的旧脚本（见 index.html 的 checkWorkerVersion）。 */
-const BUILD = '20261111-4style';
 
 self.onmessage = function (e) {
   const msg = e.data;
-
-  if (msg.type === 'hello') {
-    self.postMessage({
-      type: 'hello',
-      build: BUILD,
-      styles: Object.keys(OILCore.STYLES || {}).length,
-      styleKeys: Object.keys(OILCore.STYLES || {}),
-    });
-    return;
-  }
-
   if (msg.type !== 'generate') return;
 
   const { rgba, w, h, opts } = msg;

@@ -68,9 +68,8 @@ window.OIL_BUILD = '20261111-4style';
 浏览器会把它当成全新 URL 去取。`worker.js` 也会把这个查询串透传给 `importScripts('core.js')`，
 保证 worker 和 core 版本一致。
 
-另外页面有两道兜底：
-- 启动时用一次性 worker 做 `hello` 握手，版本对不上就直接提示强制刷新；
-- 生成完成后校验 `result.style` 是否等于用户选的风格，不匹配就报错而不是静默出图。
+生成完成时页面会校验 `result.style` 是否等于用户选的风格——旧版 worker 不认识
+`style` 字段，不匹配就明确报错提示强制刷新，**不会静默输出一张油画糊弄过去**。
 
 
 ## 技术实现

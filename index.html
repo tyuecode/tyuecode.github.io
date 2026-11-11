@@ -297,37 +297,21 @@ let curFile = null, curImg = null, curRGBA = null, curW = 0, curH = 0;
 let worker = null, result = null, curStyle = 'oil';
 
 /* ---------------- 版本自检 ----------------
- * 静态资源被 CDN 缓存住时，可能出现「新页面 + 旧脚本」。这里起一个一次性
- * worker 做握手：新版 worker 会回 build 字段，旧版不会（它只认 generate）。
- * 这样能在用户点「开始生成」之前就提醒，而不是等整张图跑完才发现风格没生效。
- * 真正的兜底是生成时的 result.style 校验，这里只是提前给个提示。
+ * 静态资源被 CDN 缓存住时，可能出现「新页面 + 旧脚本」。
+ *
+ * 这里不再靠 worker 握手（网络慢时握手容易超时误判），而是直接检查
+ * 页面已加载的 render.js 是不是新版——它是 <script> 同步引入的，
+ * 浏览器要么拿到新版要么拿到旧版，判断确定、无竞态。
+ * worker 那侧的兜底是生成完成后对 result.style 的校验。
  */
-(function checkWorkerVersion() {
-  let w;
-  try {
-    w = new Worker('worker.js?v=' + encodeURIComponent(window.OIL_BUILD || Date.now()));
-  } catch (_) { return; }
-  let done = false;
-  const finish = ok => {
-    if (done) return;
-    done = true;
-    try { w.terminate(); } catch (_) {}
-    if (!ok) {
-      setTimeout(() => {
-        if (curImg) return;                 // 已经选好图就别覆盖提示
-        setStat('浏览器缓存了旧版脚本，建议按 Ctrl+F5（Mac 为 ⌘+Shift+R）强制刷新。', true);
-      }, 0);
-    }
-  };
-  const timer = setTimeout(() => finish(false), 3000);
-  w.onmessage = e => {
-    if (e.data && e.data.type === 'hello') {
-      clearTimeout(timer);
-      finish(e.data.build === window.OIL_BUILD && e.data.styles === 4);
-    }
-  };
-  w.onerror = () => { clearTimeout(timer); finish(false); };
-  w.postMessage({ type: 'hello' });
+(function checkAssetVersion() {
+  const ok = !!(window.OILRender && window.OILRender.paintGround && window.OILRender.preprocess);
+  if (!ok) {
+    setTimeout(() => {
+      if (curImg) return;
+      setStat('页面脚本未正确加载，请按 Ctrl+F5（Mac 为 ⌘+Shift+R）强制刷新。', true);
+    }, 0);
+  }
 })();
 
 /* ---------------- 风格卡片 ---------------- */

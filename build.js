@@ -7,4 +7,4 @@
  * 解决办法：所有脚本引用都带上 ?v=BUILD 查询串，每次发布改 BUILD 值即可
  * 让浏览器当成全新 URL 去取。这里集中管理，避免各处漏改。
  */
-window.OIL_BUILD = '20261111-4style';
+window.OIL_BUILD = '20261111-4style-b';
