@@ -12,6 +12,7 @@
   'use strict';
 
   const KIND_NORMAL = 0, KIND_GLAZE = 1, KIND_SCUMBLE = 2, KIND_IMPASTO = 3, KIND_FILL = 4;
+  const KIND_DOT = 5, KIND_GLOW = 6, KIND_PIXEL = 7;
   const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 
   /* 安全批量追加。
@@ -1561,6 +1562,492 @@
     return stages;
   }
 
+  /* ================================================================ 风格五：水墨
+   * 宣纸底 + 墨色笔触。墨分五色靠透明度叠出来，不是靠换颜色；
+   * 笔锋有浓淡枯湿：起笔重、行笔变淡、收笔飞白。
+   */
+  const INK_STAGE = [
+    ['wash', '铺水'],        // 大面积淡墨，先定气氛
+    ['outline', '勾线'],     // 浓墨勾结构
+    ['seal', '渲染'],        // 分层上墨，建立明暗
+    ['rime', '皴擦'],        // 侧锋干笔，做质感
+    ['dot', '点苔'],         // 苔点与细节
+    ['blank', '留白'],       // 最亮处不画，让纸透出来
+  ];
+
+  function buildInk(A, rgba, W, H, opts, onStage) {
+    const P = makePainter(A, rgba, W, H, opts.seed || 20261109);
+    const base = Math.max(W, H) / 1527;
+    const s = (opts.scale || 1) * Math.max(0.45, base);
+    const stages = [];
+    const WT = {}, LB = {};
+    INK_STAGE.forEach(([n, l, w]) => { WT[n] = w; LB[n] = l; });
+    const push = (name, ss) => {
+      stages.push({ name, label: LB[name] || name, weight: WT[name] || 5, strokes: ss });
+      if (onStage) onStage(name, ss.length, LB[name] || name);
+    };
+
+    /* 墨色：不用纯黑，用带一点暖调的松烟墨。
+     * 浓度 k 决定灰度——水墨的味道全在「淡而不薄」。
+     * 原图越暗 → 用越浓的墨。 */
+    const ink = (lumV, k) => {
+      const t = clamp(lumV / 255, 0, 1);          // 0 暗 → 1 亮
+      const conc = clamp(k === undefined ? (1 - t) : k, 0, 1);
+      // 最淡时约 210（淡墨），最浓时约 26（焦墨）
+      const v = 210 - 184 * Math.pow(conc, 0.85);
+      const j = 0.94 + P.rnd() * 0.10;
+      return P.hex(v * j, v * j * 0.985, v * j * 0.945);
+    };
+
+    // 1 铺水：极淡的大笔横扫，像先打湿纸面
+    {
+      const all = [];
+      for (const [sp, w0, w1, a] of [[46, 26, 42, 0.10], [32, 16, 28, 0.13]]) {
+        const g = P.grid(sp * s, 0.6);
+        const X = [], Y = [], L = [], Wd = [], Lay = [];
+        for (let i = 0; i < g.X.length; i++) {
+          const c = P.sampleA(A.coh, g.X[i], g.Y[i]);
+          X.push(g.X[i]); Y.push(g.Y[i]);
+          L.push((34 + P.rnd() * 40) * (0.7 + 0.6 * c) * s);
+          Wd.push((w0 + P.rnd() * (w1 - w0)) * s);
+          Lay.push(P.sampleA(A.labels, g.X[i], g.Y[i]));
+        }
+        appendAll(all, P.makeRaw(X, Y, L, Wd, Lay, 6, 0, KIND_NORMAL, a,
+          Q => ink(P.lum(Q[0], Q[1]), 0.30), 'ink-wash', { maxTurn: 0.20 }));
+      }
+      push('wash', all);
+    }
+
+    // 2 勾线：浓墨中锋，只沿主结构
+    {
+      const e = P.edgeSeeds(null, 0.5, 3.6 * s, A.eMajor);
+      const L = [], Wd = [], Lay = [];
+      for (let i = 0; i < e.X.length; i++) {
+        const coh = P.sampleA(A.coh, e.X[i], e.Y[i]);
+        L.push((16 + P.rnd() * 22) * (0.75 + 0.6 * coh) * s);
+        // 中锋线细，起收有粗细变化
+        Wd.push((0.9 + P.rnd() * 1.5) * Math.max(0.85, s));
+        Lay.push(P.sampleA(A.labels, e.X[i], e.Y[i]));
+      }
+      push('outline', P.makeRaw(e.X, e.Y, L, Wd, Lay, 6, 0, KIND_NORMAL, 0.88,
+        Q => ink(P.lum(Q[0], Q[1]), 0.92), 'ink-line',
+        { requireEdge: 0.5, edgeField: A.eMajor, colorTol: 999, maxTurn: 0.26 }));
+    }
+
+    // 3 渲染：按明暗分档上墨，暗处多叠几遍
+    {
+      const all = [];
+      for (const [sp, w0, w1, thr, a, conc] of [
+        [30, 20, 34, 205, 0.16, 0.40],
+        [22, 14, 26, 160, 0.20, 0.58],
+        [15, 9, 18, 115, 0.24, 0.76],
+      ]) {
+        const g = P.grid(sp * s, 0.65);
+        const X = [], Y = [], L = [], Wd = [], Lay = [];
+        for (let i = 0; i < g.X.length; i++) {
+          if (P.lum(g.X[i], g.Y[i]) > thr) continue;
+          const c = P.sampleA(A.coh, g.X[i], g.Y[i]);
+          X.push(g.X[i]); Y.push(g.Y[i]);
+          // 湿墨的笔触更宽更短，像墨团化开，而不是长条排线
+          L.push((14 + P.rnd() * 20) * (0.7 + 0.5 * c) * s);
+          Wd.push((w0 + P.rnd() * (w1 - w0)) * s);
+          Lay.push(P.sampleA(A.labels, g.X[i], g.Y[i]));
+        }
+        appendAll(all, P.makeRaw(X, Y, L, Wd, Lay, 5, 0, KIND_GLAZE, a,
+          Q => ink(P.lum(Q[0], Q[1]), conc), 'ink-shade', { maxTurn: 0.16 }));
+      }
+      push('seal', all);
+    }
+
+    // 4 皴擦：侧锋干笔，笔毛散开做质感（只在中间调，太亮太暗都不用）
+    {
+      // 水墨讲究「疏可走马」，皴擦宁少勿多，只用来点出材质
+      const g = P.grid(16 * s, 0.8);
+      const X = [], Y = [], L = [], Wd = [], Lay = [];
+      for (let i = 0; i < g.X.length; i++) {
+        const lv = P.lum(g.X[i], g.Y[i]);
+        if (lv > 185 || lv < 78) continue;
+        if (P.sampleA(A.coh, g.X[i], g.Y[i]) < 0.45) continue; // 只皴结构强处
+        if (P.rnd() > 0.55) continue;                          // 大面积留空
+        X.push(g.X[i]); Y.push(g.Y[i]);
+        L.push((8 + P.rnd() * 12) * s);
+        Wd.push((3.0 + P.rnd() * 3.0) * s);
+        Lay.push(P.sampleA(A.labels, g.X[i], g.Y[i]));
+      }
+      push('rime', P.makeRaw(X, Y, L, Wd, Lay, 4, 0, KIND_SCUMBLE, 0.13,
+        Q => ink(P.lum(Q[0], Q[1]), 0.72), 'ink-rime', { maxTurn: 0.18 }));
+    }
+
+    // 5 点苔：焦墨小点，提神
+    {
+      const g = P.grid(11 * s, 0.8);
+      const X = [], Y = [], L = [], Wd = [], Lay = [];
+      for (let i = 0; i < g.X.length; i++) {
+        const lv = P.lum(g.X[i], g.Y[i]);
+        if (lv > 110) continue;          // 只在暗部点
+        if (P.rnd() > 0.5) continue;     // 稀疏
+        X.push(g.X[i]); Y.push(g.Y[i]);
+        L.push((3 + P.rnd() * 5) * s);
+        Wd.push((1.6 + P.rnd() * 2.0) * Math.max(0.85, s));
+        Lay.push(P.sampleA(A.labels, g.X[i], g.Y[i]));
+      }
+      push('dot', P.makeRaw(X, Y, L, Wd, Lay, 3, 1, KIND_NORMAL, 0.85,
+        () => ink(0, 0.96), 'ink-dot'));
+    }
+
+    // 6 留白：最亮处轻扫几笔白，把纸的通透感找回来
+    {
+      const g = P.grid(18 * s, 0.8);
+      const X = [], Y = [], L = [], Wd = [], Lay = [];
+      for (let i = 0; i < g.X.length; i++) {
+        if (P.lum(g.X[i], g.Y[i]) < 218) continue;
+        X.push(g.X[i]); Y.push(g.Y[i]);
+        L.push((16 + P.rnd() * 24) * s);
+        Wd.push((6 + P.rnd() * 8) * s);
+        Lay.push(P.sampleA(A.labels, g.X[i], g.Y[i]));
+      }
+      push('blank', P.makeRaw(X, Y, L, Wd, Lay, 4, 1, KIND_NORMAL, 0.13,
+        () => P.hex(252, 250, 243), 'ink-blank', { maxTurn: 0.22 }));
+    }
+
+    return stages;
+  }
+
+  /* ================================================================ 风格六：点彩
+   * 修拉那套：整个画面由密集小色点堆成，颜色靠视觉混色。
+   */
+  const DOT_STAGE = [
+    ['under', '底色'],       // 稀疏松散的底点
+    ['block', '中层'],       // 中等密度，建立大色关系
+    ['fill', '密集'],        // 高密度，画面成形
+    ['edge', '边界'],        // 沿结构加密，勾出轮廓
+    ['spark', '高光'],       // 亮点点睛
+  ];
+
+  function buildDot(A, rgba, W, H, opts, onStage) {
+    const P = makePainter(A, rgba, W, H, opts.seed || 20261109);
+    const base = Math.max(W, H) / 1527;
+    const s = (opts.scale || 1) * Math.max(0.45, base);
+    const stages = [];
+    const WT = {}, LB = {};
+    DOT_STAGE.forEach(([n, l, w]) => { WT[n] = w; LB[n] = l; });
+    const push = (name, ss) => {
+      stages.push({ name, label: LB[name] || name, weight: WT[name] || 5, strokes: ss });
+      if (onStage) onStage(name, ss.length, LB[name] || name);
+    };
+
+    /* 单点：位置抖动 + 直径 + 颜色抖动。
+     * 点彩的关键是「颜色不纯」——点在原色附近做小范围偏移，
+     * 让相邻的点靠眼睛去混，而不是每点都用同一个平均色。 */
+    const dotColor = (x, y, jitterAmt) => {
+      const c = P.sampleRGB(x, y);
+      // 色相抖动：轻微偏向原色的高饱和侧
+      const mx = Math.max(c[0], c[1], c[2]);
+      const sat = mx > 8 ? (mx - Math.min(c[0], c[1], c[2])) / mx : 0;
+      const boost = 1 + jitterAmt * (0.25 + sat * 0.5);
+      const gv = 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2];
+      const rr = gv + (c[0] - gv) * boost;
+      const gg = gv + (c[1] - gv) * boost;
+      const bb = gv + (c[2] - gv) * boost;
+      // 每点微抖，避免死板
+      const j = 1 + (P.rnd() * 2 - 1) * jitterAmt * 0.22;
+      return P.hex(rr * j, gg * j, bb * j);
+    };
+
+    /* 撒点：在网格上加抖动，点之间略微重叠才不露白 */
+    const scatter = (spacing, radiusMul, alpha, detail, tag, densityFilter) => {
+      const out = [];
+      const sp = spacing * s;
+      const rowH = sp * 0.866;       // 六边形错排，覆盖更均匀
+      let row = 0;
+      for (let y = rowH * 0.5; y < H; y += rowH, row++) {
+        const off = (row % 2) ? sp * 0.5 : 0;
+        for (let x = off + sp * 0.5; x < W; x += sp) {
+          const jx = x + (P.rnd() * 2 - 1) * sp * 0.42;
+          const jy = y + (P.rnd() * 2 - 1) * sp * 0.42;
+          if (jx < 1 || jy < 1 || jx >= W - 1 || jy >= H - 1) continue;
+          if (densityFilter && !densityFilter(jx, jy)) continue;
+          const lv = P.lum(jx, jy);
+          /* 暗处把点放大一点：纸是白的，暗区点太小会从缝里透出白点，
+           * 看起来像满屏噪点。亮区的点则保持小巧，观感更透气。 */
+          const darkK = 1 + 0.42 * Math.pow(1 - clamp(lv / 255, 0, 1), 1.5);
+          const rad = (sp * 0.5) * radiusMul * darkK * (0.78 + P.rnd() * 0.44);
+          out.push({
+            d: 'M' + jx.toFixed(1) + ' ' + jy.toFixed(1),
+            c: dotColor(jx, jy, 0.35),
+            w: +(rad * 2).toFixed(2), a: alpha, kind: KIND_DOT,
+            len: +(rad * 2).toFixed(1), layer: P.sampleA(A.labels, jx, jy) | 0,
+            detail: detail ? 1 : 0, tag,
+          });
+        }
+      }
+      return out;
+    };
+
+    // 1 底色：稀疏大点
+    push('under', scatter(13, 1.0, 0.72, 0, 'dot-under'));
+    // 2 中层
+    push('block', scatter(9, 0.95, 0.80, 0, 'dot-block'));
+    // 3 密集层：铺满，画面基本成形
+    push('fill', scatter(6.5, 0.92, 0.88, 0, 'dot-fill'));
+    // 4 边界：只沿结构加密
+    push('edge', scatter(5.2, 0.80, 0.92, 1, 'dot-edge',
+      (x, y) => P.sampleA(A.sal, x, y) > 0.12));
+    // 5 高光：亮部小点（只在真正亮的地方，暗背景上不能撒白点）
+    push('spark', scatter(8, 0.62, 0.85, 1, 'dot-spark',
+      (x, y) => P.lum(x, y) > 205));
+
+    return stages;
+  }
+
+  /* ================================================================ 风格七：霓虹
+   * 深底 + 发光彩色线条，像霓虹招牌。
+   */
+  const NEON_STAGE = [
+    ['base', '铺底'],        // 暗部体积，让画面有底
+    ['wire', '主线'],        // 主要结构，最亮的发光线
+    ['filament', '细线'],    // 内部细节线
+    ['halo', '光晕'],        // 大范围柔光
+    ['flare', '亮点'],       // 高光爆点
+  ];
+
+  function buildNeon(A, rgba, W, H, opts, onStage) {
+    const P = makePainter(A, rgba, W, H, opts.seed || 20261109);
+    const base = Math.max(W, H) / 1527;
+    const s = (opts.scale || 1) * Math.max(0.45, base);
+    const stages = [];
+    const WT = {}, LB = {};
+    NEON_STAGE.forEach(([n, l, w]) => { WT[n] = w; LB[n] = l; });
+    const push = (name, ss) => {
+      stages.push({ name, label: LB[name] || name, weight: WT[name] || 5, strokes: ss });
+      if (onStage) onStage(name, ss.length, LB[name] || name);
+    };
+
+    /* 霓虹色：把原图颜色推到高饱和高亮度，暗处给冷紫，
+     * 这样整幅画面像被通电了，而不是把原图调亮。
+     * 亮处不要太白——否则高光区堆满白线就成了一片白纸，
+     * 稍微压暗反而能靠对比把轮廓衬出来。 */
+    const neon = (lumV, hueSeedX, hueSeedY) => {
+      let r, g, b;
+      if (lumV < 26) {
+        // 最暗处：冷紫蓝，避免死黑
+        r = 46; g = 30; b = 96;
+      } else {
+        const c = P.sampleRGB(hueSeedX, hueSeedY);
+        const gv = 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2];
+        // 拉到高饱和（乘 2.1）再整体提亮
+        r = gv + (c[0] - gv) * 2.1;
+        g = gv + (c[1] - gv) * 2.1;
+        b = gv + (c[2] - gv) * 2.1;
+        // 目标亮度：中间调最亮，越亮的地方反而稍微收一点
+        const t = clamp(lumV / 255, 0, 1);
+        const target = 118 + 120 * Math.sin(Math.PI * Math.min(1, t * 0.92));
+        const mx = Math.max(r, g, b, 1);
+        const k = target / mx;
+        r *= k; g *= k; b *= k;
+      }
+      const j = 0.95 + P.rnd() * 0.1;
+      return P.hex(clamp(r * j, 0, 255), clamp(g * j, 0, 255), clamp(b * j, 0, 255));
+    };
+
+    // 1 铺底：用极淡的宽笔把暗部体积压出来
+    {
+      const all = [];
+      for (const [sp, w0, w1, a, thr] of [[30, 20, 34, 0.10, 120], [20, 12, 22, 0.14, 80]]) {
+        const g = P.grid(sp * s, 0.6);
+        const X = [], Y = [], L = [], Wd = [], Lay = [];
+        for (let i = 0; i < g.X.length; i++) {
+          if (P.lum(g.X[i], g.Y[i]) > thr) continue;
+          X.push(g.X[i]); Y.push(g.Y[i]);
+          L.push((24 + P.rnd() * 30) * s);
+          Wd.push((w0 + P.rnd() * (w1 - w0)) * s);
+          Lay.push(P.sampleA(A.labels, g.X[i], g.Y[i]));
+        }
+        appendAll(all, P.makeRaw(X, Y, L, Wd, Lay, 5, 0, KIND_NORMAL, a,
+          Q => neon(P.lum(Q[0], Q[1]), Q[0], Q[1]), 'neon-base', { maxTurn: 0.20 }));
+      }
+      push('base', all);
+    }
+
+    // 2 主线：主结构发光
+    {
+      const e = P.edgeSeeds(null, 0.5, 4.2 * s, A.eMajor);
+      const X = [], Y = [], L = [], Wd = [], Lay = [];
+      for (let i = 0; i < e.X.length; i++) {
+        // 平坦高光区不放主线：那里线一多就成白纸，轮廓靠细线带过即可
+        const coh = P.sampleA(A.coh, e.X[i], e.Y[i]);
+        if (coh < 0.30) continue;
+        X.push(e.X[i]); Y.push(e.Y[i]);
+        L.push((18 + P.rnd() * 24) * (0.75 + 0.55 * coh) * s);
+        Wd.push((0.85 + P.rnd() * 0.8) * Math.max(0.85, s));
+        Lay.push(P.sampleA(A.labels, e.X[i], e.Y[i]));
+      }
+      push('wire', P.makeRaw(X, Y, L, Wd, Lay, 6, 0, KIND_GLOW, 0.88,
+        Q => neon(P.lum(Q[0], Q[1]), Q[0], Q[1]), 'neon-wire',
+        { requireEdge: 0.5, edgeField: A.eMajor, colorTol: 999, maxTurn: 0.28 }));
+    }
+
+    // 3 细线：内部结构（宁疏勿密——亮部渐变区边缘太碎，密了会糊成一片）
+    {
+      const e = P.edgeSeeds(null, 0.5, 7.5 * s, A.eFine);
+      const X = [], Y = [], L = [], Wd = [], Lay = [];
+      for (let i = 0; i < e.X.length; i++) {
+        // 结构强 + 方向一致，才值得画一根霓虹线
+        if (P.sampleA(A.sal, e.X[i], e.Y[i]) < 0.42) continue;
+        const coh = P.sampleA(A.coh, e.X[i], e.Y[i]);
+        if (coh < 0.50) continue;
+        X.push(e.X[i]); Y.push(e.Y[i]);
+        L.push((10 + P.rnd() * 14) * (0.78 + 0.5 * coh) * s);
+        Wd.push((0.6 + P.rnd() * 0.5) * Math.max(0.85, s));
+        Lay.push(P.sampleA(A.labels, e.X[i], e.Y[i]));
+      }
+      push('filament', P.makeRaw(X, Y, L, Wd, Lay, 4, 0, KIND_GLOW, 0.55,
+        Q => neon(P.lum(Q[0], Q[1]), Q[0], Q[1]), 'neon-fil',
+        { requireEdge: 0.5, edgeField: A.eFine, colorTol: 999, maxTurn: 0.30 }));
+    }
+
+    // 4 光晕：大范围柔光块，让暗处不空（只在暗部，亮部叠光会糊成白）
+    {
+      const g = P.grid(34 * s, 0.7);
+      const X = [], Y = [], L = [], Wd = [], Lay = [];
+      for (let i = 0; i < g.X.length; i++) {
+        if (P.lum(g.X[i], g.Y[i]) > 120) continue;
+        X.push(g.X[i]); Y.push(g.Y[i]);
+        L.push((30 + P.rnd() * 36) * s);
+        Wd.push((12 + P.rnd() * 10) * s);
+        Lay.push(P.sampleA(A.labels, g.X[i], g.Y[i]));
+      }
+      push('halo', P.makeRaw(X, Y, L, Wd, Lay, 5, 0, KIND_GLOW, 0.085,
+        Q => neon(P.lum(Q[0], Q[1]), Q[0], Q[1]), 'neon-halo'));
+    }
+
+    // 5 亮点：最高光的爆点
+    {
+      const X = [], Y = [], L = [], Wd = [], Lay = [];
+      const step = Math.max(6, Math.floor(Math.max(W, H) / 220));
+      for (let y = 4; y < H - 4; y += step) {
+        for (let x = 4; x < W - 4; x += step) {
+          if (P.lum(x, y) < 232) continue;
+          X.push(x); Y.push(y);
+          L.push((3 + P.rnd() * 5) * s);
+          Wd.push((1.4 + P.rnd() * 1.6) * Math.max(0.85, s));
+          Lay.push(P.sampleA(A.labels, x, y));
+        }
+      }
+      push('flare', P.makeRaw(X, Y, L, Wd, Lay, 3, 1, KIND_GLOW, 0.95,
+        Q => neon(255, Q[0], Q[1]), 'neon-flare'));
+    }
+
+    return stages;
+  }
+
+  /* ================================================================ 风格八：像素
+   * 量化成低分辨率格子，逐格点亮。格子大小由细腻程度控制。
+   */
+  const PIXEL_STAGE = [
+    ['low', '低分辨率'],     // 先铺大块，像加载时的缩略图
+    ['mid', '中分辨率'],     // 补一层中格
+    ['fine', '细化'],        // 最终格
+    ['accent', '高光格'],
+  ];
+
+  function buildPixel(A, rgba, W, H, opts, onStage) {
+    const P = makePainter(A, rgba, W, H, opts.seed || 20261109);
+    const base = Math.max(W, H) / 1527;
+    const stages = [];
+    const WT = {}, LB = {};
+    PIXEL_STAGE.forEach(([n, l, w]) => { WT[n] = w; LB[n] = l; });
+    /* 像素块总数上限：格子太多就失去像素画的味道，也吃内存 */
+    const MAX_CELLS = 60000;
+    const push = (name, ss) => {
+      stages.push({ name, label: LB[name] || name, weight: WT[name] || 5, strokes: ss });
+      if (onStage) onStage(name, ss.length, LB[name] || name);
+    };
+
+    /* 格边长：细腻程度越大格子越小（越清晰）。
+     * 基准让 1527px 宽的画面大约 130 格宽。 */
+    const fine = clamp(opts.scale || 1, 0.55, 1.8);
+    const cellsAcross = clamp(Math.round(130 / fine), 48, 260);
+    const cell = Math.max(2, Math.round(Math.max(W, H) / cellsAcross));
+
+    /* 量化配色：把画面压到有限的几档色，像素画才有「调色板」感。
+     * 用亮度 + 色相量化的简化做法。 */
+    const QUANT = 5;   // 每通道量化档数
+    const quant = (v) => Math.round(clamp(v, 0, 255) / 255 * (QUANT - 1)) / (QUANT - 1) * 255;
+
+    const makeGrid = (step, alpha, tag, onlyLum) => {
+      const out = [];
+      const nx = Math.ceil(W / step), ny = Math.ceil(H / step);
+      const half = step / 2;
+      for (let gy = 0; gy < ny; gy++) {
+        for (let gx = 0; gx < nx; gx++) {
+          const cx0 = gx * step, cy0 = gy * step;
+          const cx = cx0 + half, cy = cy0 + half;
+          if (cx >= W || cy >= H) continue;
+          // 取格子中心附近若干点平均，降噪
+          let r = 0, g = 0, b = 0, n = 0;
+          for (const [ox, oy] of [[0, 0], [-half * 0.4, 0], [half * 0.4, 0], [0, -half * 0.4], [0, half * 0.4]]) {
+            const sx = cx + ox, sy = cy + oy;
+            if (sx < 0 || sy < 0 || sx >= W || sy >= H) continue;
+            const c = P.sampleRGB(sx, sy);
+            r += c[0]; g += c[1]; b += c[2]; n++;
+          }
+          r /= n; g /= n; b /= n;
+          const lv = r * 0.299 + g * 0.587 + b * 0.114;
+          if (onlyLum !== undefined && lv < onlyLum) continue;
+          // 提饱和：像素画颜色要比原图更「跳」
+          const gv = lv;
+          const satB = 1.45, conB = 1.12;
+          r = gv + (r - gv) * satB; g = gv + (g - gv) * satB; b = gv + (b - gv) * satB;
+          r = 128 + (r - 128) * conB; g = 128 + (g - 128) * conB; b = 128 + (b - 128) * conB;
+          out.push({
+            d: 'M' + cx.toFixed(1) + ' ' + cy.toFixed(1),
+            c: P.hex(quant(r), quant(g), quant(b)),
+            w: +(step / 2).toFixed(2),      // 渲染端用 w*2 作为边长
+            a: alpha, kind: KIND_PIXEL,
+            len: +(step * 2).toFixed(1), layer: P.sampleA(A.labels, cx, cy) | 0,
+            detail: 0, tag,
+          });
+        }
+      }
+      return out;
+    };
+
+    // 1 低分辨率：格子大，先铺出大概
+    const coarse = Math.max(cell * 4, 8);
+    push('low', makeGrid(coarse, 1, 'px-low'));
+    // 2 中分辨率
+    const midStep = Math.max(cell * 2, 4);
+    push('mid', makeGrid(midStep, 1, 'px-mid'));
+    // 3 细化：最终格（受总数上限约束）
+    const nx = Math.ceil(W / cell), ny = Math.ceil(H / cell);
+    if (nx * ny <= MAX_CELLS) {
+      push('fine', makeGrid(cell, 1, 'px-fine'));
+    }
+    // 4 高光格：最亮的格再叠一层提亮
+    {
+      const out = [];
+      const nx2 = Math.ceil(W / cell), ny2 = Math.ceil(H / cell);
+      const half = cell / 2;
+      for (let gy = 0; gy < ny2; gy++) {
+        for (let gx = 0; gx < nx2; gx++) {
+          const cx = gx * cell + half, cy = gy * cell + half;
+          if (cx >= W || cy >= H) continue;
+          if (P.lum(cx, cy) < 226) continue;
+          out.push({
+            d: 'M' + cx.toFixed(1) + ' ' + cy.toFixed(1),
+            c: '#ffffff',
+            w: +(cell / 2 * 0.55).toFixed(2), a: 0.55, kind: KIND_PIXEL,
+            len: +(cell).toFixed(1), layer: 0, detail: 1, tag: 'px-peak',
+          });
+        }
+      }
+      push('accent', out);
+    }
+
+    return stages;
+  }
+
   /* ---------------------------------------------------------------- 风格注册表 */
   const STYLES = {
     oil: {
@@ -1591,8 +2078,36 @@
       build: buildPencil,
       steps: PENCIL_STAGE.map(x => x[1]),
     },
+    ink: {
+      key: 'ink', label: '水墨', nStages: INK_STAGE.length,
+      desc: '宣纸上的墨色，浓淡枯湿、留白透气',
+      ground: { type: 'ink', color: '#f4efe3' },
+      build: buildInk,
+      steps: INK_STAGE.map(x => x[1]),
+    },
+    dot: {
+      key: 'dot', label: '点彩', nStages: DOT_STAGE.length,
+      desc: '用密集小色点堆出来，靠眼睛混色',
+      ground: { type: 'dot', color: '#f7f5f0' },
+      build: buildDot,
+      steps: DOT_STAGE.map(x => x[1]),
+    },
+    neon: {
+      key: 'neon', label: '霓虹', nStages: NEON_STAGE.length,
+      desc: '深底发光线条，像通电的招牌',
+      ground: { type: 'neon', color: '#05040a' },
+      build: buildNeon,
+      steps: NEON_STAGE.map(x => x[1]),
+    },
+    pixel: {
+      key: 'pixel', label: '像素', nStages: PIXEL_STAGE.length,
+      desc: '量化成方格逐格点亮，复古游戏感',
+      ground: { type: 'pixel', color: '#0a0a10' },
+      build: buildPixel,
+      steps: PIXEL_STAGE.map(x => x[1]),
+    },
   };
-  const STYLE_ORDER = ['oil', 'lineart', 'posterize', 'pencil'];
+  const STYLE_ORDER = ['oil', 'lineart', 'posterize', 'pencil', 'ink', 'dot', 'neon', 'pixel'];
 
   function buildStages(A, rgba, W, H, opts, onStage) {
     const st = STYLES[opts.style] || STYLES.oil;
@@ -1670,6 +2185,7 @@
     analyze, buildStages, buildTimeline, autoROIs, layerContours, simplify,
     STYLES, STYLE_ORDER, STAGE_CN, STAGE_W,
     K_NORMAL: KIND_NORMAL, K_GLAZE: KIND_GLAZE, K_SCUMBLE: KIND_SCUMBLE,
-    K_IMPASTO: KIND_IMPASTO, K_FILL: KIND_FILL,
+    K_IMPASTO: KIND_IMPASTO, K_FILL: KIND_FILL, K_DOT: KIND_DOT,
+    K_GLOW: KIND_GLOW, K_PIXEL: KIND_PIXEL,
   };
 })(typeof self !== 'undefined' ? self : this);

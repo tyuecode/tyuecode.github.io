@@ -154,7 +154,7 @@
 <div class="wrap">
   <header>
     <h1>strokeoil</h1>
-    <div class="sub">图片逐笔重绘 · 四种风格 · 纯浏览器运行</div>
+    <div class="sub">图片逐笔重绘 · 八种风格 · 纯浏览器运行</div>
   </header>
   <div class="flow" id="flowLine">选一种风格，图片会被逐笔重绘成可播放的动画</div>
 
@@ -273,11 +273,15 @@
         <div class="tips">
           <b style="color:var(--dim)">全部本地处理</b>：图片只留在你的浏览器里，不会上传到任何服务器。
           这也意味着生成速度取决于你的电脑。<br><br>
-          <b style="color:var(--dim)">四种风格</b>：<br>
+          <b style="color:var(--dim)">八种风格</b>：<br>
           油画——十道古典工序，笔触有厚涂和罩染；<br>
           线描——近黑底上的细白线，只勾结构；<br>
           色块——分层平涂的硬边色块，海报配色；<br>
-          素描——纸底石墨排线，暗部交叉线。<br><br>
+          素描——纸底石墨排线，暗部交叉线；<br>
+          水墨——宣纸墨色，浓淡枯湿、留白透气；<br>
+          点彩——密集小色点靠眼睛混色；<br>
+          霓虹——深底发光线条；<br>
+          像素——量化成方格逐格点亮。<br><br>
           <b style="color:var(--dim)">细腻程度</b>：数值越小笔触越细越密、细节越清楚，文件也越大。<br><br>
           <b style="color:var(--dim)">分析分辨率</b>：程序在大图上会自动降采样后再分析结构，
           笔触种子和取色仍在原图上做，所以细节不会糊。
@@ -287,7 +291,7 @@
   </div>
 
   <footer>
-    strokeoil · 油画 / 线描 / 色块 / 素描<br>
+    strokeoil · 油画 / 线描 / 色块 / 素描 / 水墨 / 点彩 / 霓虹 / 像素<br>
     纯前端实现，无需服务器 · <a href="https://github.com/tyuecode/tyuecode.github.io" id="repoLink" target="_blank">源码</a>
   </footer>
 </div>
@@ -318,28 +322,39 @@ let worker = null, result = null, curStyle = 'oil';
 })();
 
 /* ---------------- 风格卡片 ---------------- */
+/* 工序名在这里维护一份展示用的（网页端不加载 core.js）；
+ * 与 core.js 里各风格的 steps 保持一致即可。 */
+const STYLE_STEPS = {
+  oil: ['底色', '起稿', '单色底层', '铺大色', '塑造', '塑形', '罩染', '干扫', '细部', '提白'],
+  lineart: ['定形', '勾主线', '结构线', '细描', '点睛'],
+  posterize: ['铺底色', '暗部色块', '中间调', '亮部', '点缀'],
+  pencil: ['起形', '铺调子', '排线', '交叉线', '提亮'],
+  ink: ['铺水', '勾线', '渲染', '皴擦', '点苔', '留白'],
+  dot: ['底色', '中层', '密集', '边界', '高光'],
+  neon: ['铺底', '主线', '细线', '光晕', '亮点'],
+  pixel: ['低分辨率', '中分辨率', '细化', '高光格'],
+};
+
 const STYLE_META = [
   { key: 'oil',       label: '油画',  desc: '十道古典工序，起收锋、厚涂、罩染、干扫' },
   { key: 'lineart',   label: '线描',  desc: '近黑底上的细白线，只勾结构，像版画稿' },
   { key: 'posterize', label: '色块',  desc: '分层平涂的硬边色块，限量配色海报感' },
   { key: 'pencil',    label: '素描',  desc: '纸底石墨排线，暗部交叉线压深' },
+  { key: 'ink',       label: '水墨',  desc: '宣纸上的墨色，浓淡枯湿、留白透气' },
+  { key: 'dot',       label: '点彩',  desc: '密集小色点堆成画面，靠眼睛混色' },
+  { key: 'neon',      label: '霓虹',  desc: '深底发光线条，像通电的招牌' },
+  { key: 'pixel',     label: '像素',  desc: '量化成方格逐格点亮，复古游戏感' },
 ];
+
 (function buildStyleCards() {
   const box = $('styleBox');
-  // 工序名从 core.js 的 STYLES 拿不到（网页端不加载 core），所以内置一份展示用
-  const STEPS = {
-    oil: ['底色', '起稿', '单色底层', '铺大色', '塑造', '塑形', '罩染', '干扫', '细部', '提白'],
-    lineart: ['定形', '勾主线', '结构线', '细描', '点睛'],
-    posterize: ['铺底色', '暗部色块', '中间调', '亮部', '点缀'],
-    pencil: ['起形', '铺调子', '排线', '交叉线', '提亮'],
-  };
   for (const s of STYLE_META) {
     const el = document.createElement('div');
     el.className = 'stile' + (s.key === curStyle ? ' on' : '');
     el.dataset.key = s.key;
     el.innerHTML = '<div class="nm"><span class="dot"></span>' + s.label + '</div>' +
       '<div class="ds">' + s.desc + '</div>' +
-      '<div class="chips">' + STEPS[s.key].map(t => '<i>' + t + '</i>').join('') + '</div>';
+      '<div class="chips">' + (STYLE_STEPS[s.key] || []).map(t => '<i>' + t + '</i>').join('') + '</div>';
     el.onclick = () => selectStyle(s.key);
     box.appendChild(el);
   }
@@ -349,21 +364,29 @@ function selectStyle(key) {
   curStyle = key;
   for (const el of $('styleBox').children) el.classList.toggle('on', el.dataset.key === key);
   const s = STYLE_META.find(x => x.key === key);
-  const STEPS = {
-    oil: ['刷底色', '起稿', '单色底层', '铺大色', '塑造', '塑形', '罩染', '干扫', '细部', '提白'],
-    lineart: ['定形', '勾主线', '结构线', '细描', '点睛'],
-    posterize: ['铺底色', '暗部色块', '中间调', '亮部', '点缀'],
-    pencil: ['起形', '铺调子', '排线', '交叉线', '提亮'],
+  $('flowLine').textContent = s.label + ' · ' + (STYLE_STEPS[key] || []).join(' → ');
+
+  const LAYER_HINT = {
+    posterize: '色块风格用它决定配色档数（5 档最稳，8 档层次最多）。',
+    pencil: '素描风格用 5 档即可，影响不大。',
+    dot: '点彩不用分层，改这个只影响内部统计。',
+    pixel: '像素风格用不到分层，改这个无影响。',
+    neon: '霓虹风格按亮度取色，分层影响很小。',
+    ink: '水墨按墨色浓淡分档，5 档最自然。',
   };
-  $('flowLine').textContent = s.label + ' · ' + STEPS[key].join(' → ');
-  $('layerHint').textContent = key === 'posterize'
-    ? '色块风格用它决定配色档数（5 档最稳，8 档层次最多）。'
-    : (key === 'pencil' ? '素描风格用 5 档即可，影响不大。' : '色彩分层的层数。');
-  $('scaleHint').textContent = key === 'posterize'
-    ? '往左＝保留更多小色块、边缘更贴原图；往右＝把小色块并掉，画面更概括。'
-    : (key === 'lineart' ? '往左＝线条更密更细；往右＝只留主线。'
-    : (key === 'pencil' ? '往左＝排线更密；往右＝笔触更粗犷。'
-    : '数值越小笔触越细越密，细节越清楚，文件也越大。'));
+  $('layerHint').textContent = LAYER_HINT[key] || '色彩分层的层数。';
+
+  const SCALE_HINT = {
+    posterize: '往左＝保留更多小色块、边缘更贴原图；往右＝把小色块并掉，画面更概括。',
+    lineart: '往左＝线条更密更细；往右＝只留主线。',
+    pencil: '往左＝排线更密；往右＝笔触更粗犷。',
+    ink: '往左＝墨色更细碎；往右＝笔触更宽，更像大笔挥洒。',
+    dot: '往左＝点更密更小（更接近照片）；往右＝点更大更疏（更像修拉）。',
+    neon: '往左＝线条更多更密；往右＝只留最亮的主干。',
+    pixel: '往左＝格子更多更清晰；往右＝格子更大更复古。',
+  };
+  $('scaleHint').textContent = SCALE_HINT[key] || '数值越小笔触越细越密，细节越清楚，文件也越大。';
+
   if (result) { $('result').style.display = 'none'; }
 }
 

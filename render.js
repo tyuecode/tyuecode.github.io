@@ -8,7 +8,7 @@
 (function (root) {
   'use strict';
 
-  const KIND = { NORMAL: 0, GLAZE: 1, SCUMBLE: 2, IMPASTO: 3, FILL: 4 };
+  const KIND = { NORMAL: 0, GLAZE: 1, SCUMBLE: 2, IMPASTO: 3, FILL: 4, DOT: 5, GLOW: 6, PIXEL: 7 };
   const RE_TOK = /[MLZ]|-?\d+(?:\.\d+)?/g;
 
   /* ---------------------------------------------------------------- 颜色工具 */
@@ -112,6 +112,65 @@
       c.fillRect(0, 0, w, h);
       return;
     }
+    if (type === 'ink') {
+      // 宣纸：暖白底 + 纤维纹理 + 轻微墨晕，四角略压
+      const img = c.getImageData(0, 0, w, h), d = img.data;
+      let seed = 20261109;
+      const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
+      for (let i = 0; i < d.length; i += 4) {
+        const v = (rnd() - 0.5) * 7;
+        d[i] += v; d[i + 1] += v * 0.98; d[i + 2] += v * 0.9;
+      }
+      c.putImageData(img, 0, 0);
+      // 湿纸的纤维
+      c.save();
+      c.globalAlpha = 0.045;
+      c.strokeStyle = '#6b5a42';
+      c.lineWidth = 1;
+      for (let i = 0; i < Math.round(w * h / 6000); i++) {
+        const x = rnd() * w, y = rnd() * h;
+        const a = (rnd() - 0.5) * 0.6, L = 8 + rnd() * 30;
+        c.beginPath(); c.moveTo(x, y);
+        c.lineTo(x + Math.cos(a) * L, y + Math.sin(a) * L); c.stroke();
+      }
+      c.restore();
+      // 四角轻微压暗，像纸被墨洇过
+      const g = c.createRadialGradient(w * 0.5, h * 0.5, Math.min(w, h) * 0.25,
+                                       w * 0.5, h * 0.5, Math.max(w, h) * 0.8);
+      g.addColorStop(0, 'rgba(120,100,70,0)');
+      g.addColorStop(1, 'rgba(120,100,70,0.09)');
+      c.fillStyle = g;
+      c.fillRect(0, 0, w, h);
+      return;
+    }
+    if (type === 'dot') {
+      // 点彩：纯白画布（修拉是在白底上点色的）
+      const img = c.getImageData(0, 0, w, h), d = img.data;
+      let seed = 20261109;
+      const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
+      for (let i = 0; i < d.length; i += 4) {
+        const v = (rnd() - 0.5) * 5;
+        d[i] += v; d[i + 1] += v; d[i + 2] += v * 0.96;
+      }
+      c.putImageData(img, 0, 0);
+      return;
+    }
+    if (type === 'neon') {
+      // 近黑底 + 极弱的中场提亮，给发光留出对比空间
+      const g = c.createRadialGradient(w * 0.5, h * 0.45, 0, w * 0.5, h * 0.5, Math.max(w, h) * 0.85);
+      g.addColorStop(0, 'rgba(40,30,70,0.30)');
+      g.addColorStop(0.6, 'rgba(14,10,26,0.12)');
+      g.addColorStop(1, 'rgba(0,0,0,0.45)');
+      c.fillStyle = g;
+      c.fillRect(0, 0, w, h);
+      return;
+    }
+    if (type === 'pixel') {
+      // 像素画：深色底 + 极淡的扫描线，营造老显示器感
+      c.fillStyle = 'rgba(0,0,0,0.18)';
+      for (let y = 0; y < h; y += 4) c.fillRect(0, y, w, 1);
+      return;
+    }
     // oil：画布颗粒
     const img = c.getImageData(0, 0, w, h), d = img.data;
     let seed = 20261109;
@@ -146,6 +205,90 @@
     const kind = pre ? pre.kind : (st[9] | 0);
     const alpha = pre ? pre.alpha : (st[8] === undefined ? 1 : st[8]);
     const w = st[2] * SC;
+
+    /* ---- 点彩圆点：修拉那种小色点，逐点落下 ---- */
+    if (kind === KIND.DOT) {
+      if (!pts) return;
+      const x = pts[0] * SC, y = pts[1] * SC;
+      c.save();
+      // 生长中用半径缩放来「点」出来
+      const r = Math.max(0.4, (w * 0.5) * (0.35 + 0.65 * Math.min(1, prog)));
+      c.globalAlpha = alpha;
+      c.fillStyle = color;
+      c.beginPath();
+      c.arc(x, y, r, 0, Math.PI * 2);
+      c.fill();
+      // 点的高光侧：让密集的点看起来有厚薄变化
+      if (prog > 0.6 && r > 1.6) {
+        c.globalAlpha = alpha * 0.28;
+        c.fillStyle = pre && pre.lite ? pre.lite : '#ffffff';
+        c.beginPath();
+        c.arc(x - r * 0.26, y - r * 0.26, r * 0.44, 0, Math.PI * 2);
+        c.fill();
+      }
+      c.restore();
+      return;
+    }
+
+    /* ---- 像素块：一格一色，硬边方块 ---- */
+    if (kind === KIND.PIXEL) {
+      if (!pts) return;
+      const x = pts[0] * SC, y = pts[1] * SC;
+      // 边长就是笔宽的 2 倍（笔宽存的是半格）
+      const sz = Math.max(1, w * 2);
+      c.save();
+      c.globalAlpha = alpha;
+      c.fillStyle = color;
+      if (prog >= 0.999) {
+        c.fillRect(x - sz / 2, y - sz / 2, sz, sz);
+      } else {
+        // 点亮过程：从中心放大
+        const k = 0.25 + 0.75 * Math.min(1, prog);
+        const s2 = sz * k;
+        c.fillRect(x - s2 / 2, y - s2 / 2, s2, s2);
+      }
+      c.restore();
+      return;
+    }
+
+    /* ---- 霓虹发光：宽而虚的外晕 + 亮芯 ---- */
+    if (kind === KIND.GLOW) {
+      if (!pts) return;
+      const r = tracePartial(c, pts, prog, SC);
+      c.save();
+      c.lineCap = 'round';
+      c.lineJoin = 'round';
+      /* 用 lighter 做加色叠加才有「发光」感，但密集区域会亮度累加到饱和成白。
+       * 所以外层辉光给得很淡，主要靠一层实心亮线撑住形体。 */
+      c.globalCompositeOperation = 'lighter';
+      c.strokeStyle = color;
+      const layers = [
+        [w * 3.2, alpha * 0.045],
+        [w * 1.7, alpha * 0.085],
+      ];
+      for (const [lw, la] of layers) {
+        c.globalAlpha = la;
+        c.lineWidth = lw;
+        c.stroke();
+      }
+      c.restore();
+
+      // 主体：正常混合画实线，保证密集处不会叠成白
+      c.save();
+      c.lineCap = 'round';
+      c.lineJoin = 'round';
+      c.globalAlpha = alpha * 0.78;
+      c.strokeStyle = color;
+      c.lineWidth = Math.max(0.55, w * 0.72);
+      c.stroke();
+      // 芯：比主体再亮一点，但很细
+      c.globalAlpha = alpha * 0.42;
+      c.strokeStyle = pre && pre.lite ? pre.lite : '#ffffff';
+      c.lineWidth = Math.max(0.45, w * 0.26);
+      c.stroke();
+      c.restore();
+      return;
+    }
 
     /* ---- 色块填充：一次铺满一块区域 ---- */
     if (kind === KIND.FILL) {
@@ -276,7 +419,8 @@
       out[i] = {
         pts: p.pts,
         color: s[1],
-        lite: (kind === KIND.SCUMBLE || kind === KIND.IMPASTO) ? ridge(s[1]) : null,
+        lite: (kind === KIND.SCUMBLE || kind === KIND.IMPASTO || kind === KIND.DOT || kind === KIND.GLOW)
+          ? ridge(s[1]) : null,
         alpha: s[8] === undefined ? 1 : s[8],
         kind,
         closed: p.closed,
