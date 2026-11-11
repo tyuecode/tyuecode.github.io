@@ -1,0 +1,687 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0f0d0b">
+<title>strokeoil · 油画工序重绘</title>
+<meta name="description" content="在浏览器里把图片重绘成按真实油画十道工序逐笔绘制的动画，全部本地处理，不上传。">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23d9a441'/%3E%3Cpath d='M7 22c4-9 8-12 11-12s5 3 7 12' stroke='%2317130c' stroke-width='3' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
+<style>
+  *{box-sizing:border-box}
+  :root{
+    --bg:#0f0d0b; --panel:#17140f; --line:#2a241c; --line2:#3a3226;
+    --gold:#d9a441; --gold2:#e8c26a; --txt:#ece6dc; --dim:#9b8d78; --dim2:#6f6455;
+    --ok:#8ee6a8; --err:#ff8080;
+  }
+  html,body{margin:0;min-height:100%;background:
+    radial-gradient(1200px 700px at 10% -10%,#1e1913 0%,#0f0d0b 55%,#080706 100%);
+    color:var(--txt);font-family:"Microsoft YaHei","PingFang SC","Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;overflow-x:hidden}
+  .wrap{max-width:1240px;margin:0 auto;padding:30px 24px 80px}
+  header{display:flex;align-items:baseline;gap:14px;margin-bottom:4px;flex-wrap:wrap}
+  h1{font-size:26px;margin:0;letter-spacing:.5px}
+  .sub{color:var(--dim);font-size:13px}
+  .flow{margin:6px 0 24px;color:var(--dim2);font-size:12.5px;letter-spacing:.3px;line-height:1.7}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start}
+  @media(max-width:940px){.grid{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px}
+  .card h2{font-size:13px;margin:0 0 14px;color:var(--dim);font-weight:600;letter-spacing:.6px}
+  #drop{border:2px dashed var(--line2);border-radius:14px;padding:36px 20px;text-align:center;
+        cursor:pointer;transition:all .2s;background:rgba(255,255,255,.012)}
+  #drop:hover{border-color:var(--gold);background:rgba(217,164,65,.045)}
+  #drop.on{border-color:var(--gold);background:rgba(217,164,65,.09);transform:scale(1.005)}
+  #drop .ico{font-size:34px;opacity:.55;margin-bottom:8px}
+  #drop .t1{font-size:14.5px;margin-bottom:4px}
+  #drop .t2{font-size:12px;color:var(--dim2)}
+  .pickBtn{display:none;margin:12px auto 0;min-height:40px;padding:8px 20px}
+  #thumbWrap{display:none;margin-top:14px}
+  #thumb{width:100%;border-radius:10px;display:block;outline:1px solid var(--line2)}
+  .fname{font-size:12px;color:var(--dim);margin-top:7px;display:flex;justify-content:space-between}
+  .row{display:flex;align-items:center;gap:12px;margin:15px 0}
+  .row label{font-size:12.5px;color:var(--dim);width:96px;flex:none}
+  .row input[type=range]{flex:1;accent-color:var(--gold);height:4px}
+  .row .val{width:86px;text-align:right;font-size:12.5px;color:var(--txt);
+            font-variant-numeric:tabular-nums}
+  .row select,.row input[type=number],.row input[type=text]{
+    background:#0c0a08;color:var(--txt);border:1px solid var(--line2);
+    border-radius:8px;padding:6px 9px;font-size:12.5px;font-family:inherit}
+  button{font-family:inherit;cursor:pointer;border-radius:11px;font-size:14px;
+         border:1px solid var(--line2);background:#221c15;color:var(--txt);padding:11px 18px;
+         transition:all .18s}
+  button:hover:not(:disabled){background:#2b2319;border-color:var(--gold)}
+  button.primary{background:linear-gradient(180deg,#e0b25c,#c08e2e);border-color:#e0b25c;
+                 color:#17130c;font-weight:700;width:100%;margin-top:8px;font-size:15px;padding:13px}
+  button.primary:hover:not(:disabled){filter:brightness(1.07)}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .bar{height:6px;border-radius:3px;background:#241e16;overflow:hidden;margin-top:14px}
+  .bar i{display:block;height:100%;width:0%;
+         background:linear-gradient(90deg,#a8761f,#e8c26a);transition:width .3s}
+  .stat{font-size:12.5px;color:var(--dim);margin-top:9px;min-height:18px}
+  .stat.err{color:var(--err)}
+  #result{display:none}
+  #result .big{font-size:34px;color:var(--gold);font-weight:700;
+               font-variant-numeric:tabular-nums;line-height:1.15}
+  .kv{display:grid;grid-template-columns:repeat(2,1fr);gap:8px 14px;margin:14px 0;font-size:12.5px}
+  .kv span{color:var(--dim)}.kv b{color:var(--txt);font-variant-numeric:tabular-nums}
+  .tips{font-size:12px;color:var(--dim2);line-height:1.8;margin-top:12px}
+  a{color:var(--gold2)}
+  .adv{margin-top:6px;border-top:1px solid var(--line);padding-top:12px}
+  .adv summary{cursor:pointer;font-size:12.5px;color:var(--dim);outline:none}
+  .files{display:flex;gap:9px;flex-wrap:wrap;margin-top:12px}
+  .files a,.files button{flex:1;min-width:120px;text-align:center;padding:10px;border-radius:9px;
+    background:#221c15;border:1px solid var(--line2);text-decoration:none;color:var(--txt);
+    font-size:12.5px}
+  .files a:hover,.files button:hover{border-color:var(--gold)}
+  .layerRow{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--dim);
+            font-variant-numeric:tabular-nums;margin:3px 0}
+  .sw{width:11px;height:11px;border-radius:3px;flex:none;outline:1px solid rgba(255,255,255,.22)}
+  .lbar{flex:1;height:4px;border-radius:2px;background:rgba(255,255,255,.07);overflow:hidden}
+  .lbar i{display:block;height:100%;background:linear-gradient(90deg,#6b5b45,#d8cbb4)}
+  .stgChip{display:inline-block;padding:2px 7px;border-radius:6px;font-size:10.5px;
+    color:var(--dim2);background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);
+    margin:2px 3px 2px 0;font-variant-numeric:tabular-nums}
+  .stgChip.on{color:#17130c;background:var(--gold2);border-color:var(--gold2)}
+  .stgChip.done{color:var(--dim);background:rgba(217,164,65,.10);border-color:rgba(217,164,65,.25)}
+  #liveWrap{display:none;margin-top:14px}
+  #live{width:100%;border-radius:10px;display:block;background:#181613;
+        outline:1px solid var(--line2);box-shadow:0 12px 34px rgba(0,0,0,.5)}
+  .liveBar{display:flex;align-items:center;gap:10px;margin-top:9px;font-size:11.5px;color:var(--dim);
+           font-variant-numeric:tabular-nums}
+  .liveTrack{flex:1;height:5px;border-radius:3px;background:rgba(255,255,255,.07);
+             overflow:hidden;cursor:pointer;position:relative}
+  .liveTrack i{display:block;height:100%;width:0%;background:linear-gradient(90deg,#a8761f,#e8c26a)}
+  .badge{font-size:10.5px;padding:2px 8px;border-radius:6px;background:rgba(217,164,65,.14);
+         color:var(--gold);border:1px solid rgba(217,164,65,.3)}
+  footer{margin-top:34px;font-size:11.5px;color:var(--dim2);line-height:1.9;text-align:center}
+  footer a{color:var(--dim)}
+
+  /* ---------------- 移动端适配 ---------------- */
+  /* 让触控目标达到 44px 最小可点区域 */
+  @media(max-width:720px){
+    .wrap{padding:16px 14px 60px}
+    h1{font-size:21px}
+    .sub{font-size:12px}
+    .flow{font-size:11.5px;margin:4px 0 18px;line-height:1.9}
+    .grid{grid-template-columns:1fr;gap:14px}
+    .card{padding:14px;border-radius:14px}
+    .card h2{font-size:12.5px;margin-bottom:11px}
+
+    /* 拖拽区更大更易点 */
+    #drop{padding:28px 16px;border-radius:12px}
+    #drop .ico{font-size:30px}
+    #drop .t1{font-size:13.5px}
+    #drop .t2{font-size:11px;line-height:1.6}
+    .pickBtn{display:block}     /* 手机上显示明确的按钮 */
+
+    /* 参数行改成上下堆叠，label 不占固定宽度 */
+    .row{flex-wrap:wrap;gap:8px;margin:13px 0}
+    .row label{width:100%;font-size:12px}
+    .row .val{width:auto;margin-left:auto}
+    .row input[type=range]{flex:1;height:32px}         /* 加高滑动条触控区 */
+    .row select,.row input[type=number],.row input[type=text]{
+      width:100%;padding:10px 12px;font-size:14px;      /* 手机输入避免缩放 */
+      min-height:44px;border-radius:10px}
+    .row input[type=number]{width:100%}
+
+    button{min-height:46px;padding:12px 18px;font-size:14.5px;border-radius:12px}
+    button.primary{padding:14px;font-size:15.5px}
+
+    /* 结果数字与 KV */
+    #result .big{font-size:30px}
+    .kv{grid-template-columns:1fr 1fr;gap:7px 10px;font-size:12px}
+
+    /* 下载按钮竖排，方便拇指点 */
+    .files{flex-direction:column}
+    .files a,.files button{min-width:0;padding:13px;font-size:13.5px;min-height:46px}
+
+    /* 预览画布占满宽度 */
+    .tips{font-size:11.5px}
+
+    /* 高级选项 summary 也加大触控区 */
+    .adv summary{min-height:40px;display:flex;align-items:center;font-size:13px}
+  }
+
+  /* 中屏（平板）：两栏但缩小间距 */
+  @media(min-width:721px) and (max-width:940px){
+    .wrap{padding:24px 18px 70px}
+    .grid{gap:14px}
+    .card{padding:15px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>strokeoil</h1>
+    <div class="sub">油画工序逐笔重绘 · 纯浏览器运行</div>
+  </header>
+  <div class="flow">刷底色 → 起稿 → 单色底层 → 铺大色 → 塑造 → 塑形 → 罩染 → 干扫 → 细部 → 提白</div>
+
+  <div class="grid">
+    <div>
+      <div class="card">
+        <h2>① 选一张图</h2>
+        <div id="drop">
+          <div class="ico">🖼</div>
+          <div class="t1">把图片拖到这里，或点击选择</div>
+          <div class="t2">PNG / JPG / WEBP · 图片不会上传，全部在本机处理</div>
+          <button type="button" class="pickBtn" id="pickBtn">选择图片</button>
+        </div>
+        <input type="file" id="file" accept="image/*" hidden>
+        <div id="thumbWrap">
+          <img id="thumb" alt="preview">
+          <div class="fname"><span id="fn">–</span><span id="fs"></span></div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:16px">
+        <h2>② 调参数</h2>
+        <div class="row">
+          <label>细腻程度</label>
+          <input type="range" id="scale" min="0.55" max="1.8" step="0.05" value="1">
+          <div class="val" id="scaleV">1.00</div>
+        </div>
+        <div class="row">
+          <label>动画时长</label>
+          <input type="range" id="secs" min="20" max="240" step="5" value="90">
+          <div class="val" id="secsV">90s</div>
+        </div>
+        <div class="row">
+          <label>处理精度</label>
+          <select id="workRes">
+            <option value="1000">快（1000px）</option>
+            <option value="1400" selected>标准（1400px）</option>
+            <option value="2000">精（2000px）</option>
+            <option value="0">原始分辨率（最慢）</option>
+          </select>
+          <div class="val"></div>
+        </div>
+        <div class="tips" style="margin-top:-4px">
+          手机建议用「快」，电脑可用「标准」或更高。
+        </div>
+        <details class="adv">
+          <summary>高级选项</summary>
+          <div class="row">
+            <label>明暗分层</label>
+            <select id="layers">
+              <option>3</option><option>4</option><option selected>5</option>
+              <option>6</option><option>7</option>
+            </select>
+            <div class="val"></div>
+          </div>
+          <div class="row">
+            <label>细节区数量</label>
+            <input type="range" id="rois" min="0" max="14" step="1" value="6">
+            <div class="val" id="roisV">6</div>
+          </div>
+          <div class="row">
+            <label>随机种子</label>
+            <input type="number" id="seed" value="20261109" step="1" style="width:120px">
+            <div class="val"></div>
+          </div>
+        </details>
+        <button class="primary" id="go" disabled>开始生成</button>
+        <div class="bar"><i id="pbar"></i></div>
+        <div class="stat" id="pstat">等待选择图片…</div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card" id="result">
+        <h2>③ 完成</h2>
+        <div class="big" id="rStrokes">–</div>
+        <div class="tips" style="margin-top:2px">条笔触</div>
+
+        <div id="liveWrap">
+          <div class="liveBar" style="margin-bottom:6px">
+            <span class="badge" id="liveState">预览中</span>
+            <span id="liveInfo" style="margin-left:auto">–</span>
+          </div>
+          <canvas id="live"></canvas>
+          <div class="liveBar">
+            <span id="liveCount">0 / 0</span>
+            <span class="liveTrack" id="liveTrack"><i id="liveBar"></i></span>
+            <span id="liveSec">0.0s</span>
+          </div>
+          <div style="margin-top:7px" id="liveStages"></div>
+        </div>
+
+        <div class="kv" id="rKv"></div>
+        <div class="files">
+          <button id="dlPlayer">⬇ 下载播放器 HTML</button>
+          <button id="dlPreview">⬇ 下载终帧 PNG</button>
+          <button id="replay">↻ 重播</button>
+        </div>
+        <div class="tips">
+          下载的播放器是单个 HTML 文件，图片和笔触全部内联，
+          双击就能离线打开，也可以直接发给别人。
+        </div>
+      </div>
+
+      <div class="card" id="hint">
+        <h2>说明</h2>
+        <div class="tips">
+          <b style="color:var(--dim)">全部本地处理</b>：图片只留在你的浏览器里，不会上传到任何服务器。
+          这也意味着生成速度取决于你的电脑。<br><br>
+          <b style="color:var(--dim)">细腻程度</b>：数值越小笔触越细越密、细节越清楚，文件也越大。
+          想要更接近原图就往左拖，想要更粗犷的笔触感就往右拖。<br><br>
+          <b style="color:var(--dim)">分析分辨率</b>：程序在大图上会自动降采样后再分析结构，
+          笔触种子和取色仍在原图上做，所以细节不会糊。想追求极限可以选「原始分辨率」。
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    strokeoil · 十道工序：底色 / 起稿 / 单色底层 / 铺大色 / 塑造 / 塑形 / 罩染 / 干扫 / 细部 / 提白<br>
+    纯前端实现，无需服务器 · <a href="https://github.com/" id="repoLink" target="_blank">源码</a>
+  </footer>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let curFile = null, curImg = null, curRGBA = null, curW = 0, curH = 0;
+let worker = null, result = null;
+
+/* ---------------- 移动端自适应 ---------------- */
+(function adaptMobile() {
+  const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
+                   || (window.matchMedia && window.matchMedia('(max-width:720px)').matches);
+  const lowMem = (navigator.deviceMemory && navigator.deviceMemory <= 4) || isMobile;
+  if (lowMem) {
+    // 手机/小内存默认用最快精度，避免卡顿和内存溢出
+    const sel = $('workRes');
+    if (sel && sel.value === '1400') { sel.value = '1000'; }
+  }
+})();
+
+/* ---------------- 文件选择 ---------------- */
+const drop = $('drop'), fileIn = $('file'), pickBtn = $('pickBtn');
+drop.onclick = () => fileIn.click();
+if (pickBtn) pickBtn.onclick = (e) => { e.stopPropagation(); fileIn.click(); };
+['dragenter','dragover'].forEach(ev => drop.addEventListener(ev, e => {
+  e.preventDefault(); drop.classList.add('on');
+}));
+['dragleave','drop'].forEach(ev => drop.addEventListener(ev, e => {
+  e.preventDefault(); drop.classList.remove('on');
+}));
+drop.addEventListener('drop', e => {
+  const f = e.dataTransfer.files && e.dataTransfer.files[0];
+  if (f) takeFile(f);
+});
+fileIn.onchange = () => { if (fileIn.files[0]) takeFile(fileIn.files[0]); };
+
+async function takeFile(f) {
+  if (!f.type.startsWith('image/')) { alert('请选择图片文件'); return; }
+  curFile = f;
+  const url = URL.createObjectURL(f);
+  $('thumb').src = url;
+  $('thumbWrap').style.display = 'block';
+  $('fn').textContent = f.name;
+  $('fs').textContent = (f.size / 1024 / 1024).toFixed(1) + ' MB';
+
+  // 解码到 canvas 取像素（原分辨率）
+  const img = new Image();
+  img.decoding = 'sync';
+  await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = url; });
+  curImg = img; curW = img.naturalWidth; curH = img.naturalHeight;
+  $('fs').textContent += ` · ${curW}×${curH}`;
+  $('go').disabled = false;
+  setStat('已选择，点「开始生成」');
+}
+
+function setStat(t, err) {
+  const el = $('pstat');
+  el.textContent = t;
+  el.className = 'stat' + (err ? ' err' : '');
+}
+function setProg(p) { $('pbar').style.width = Math.max(0, Math.min(100, p)) + '%'; }
+
+$('scale').oninput = e => { $('scaleV').textContent = (+e.target.value).toFixed(2); };
+$('secs').oninput = e => { $('secsV').textContent = e.target.value + 's'; };
+$('rois').oninput = e => { $('roisV').textContent = e.target.value; };
+
+/* ---------------- 生成 ---------------- */
+$('go').onclick = async () => {
+  if (!curImg) return;
+  $('go').disabled = true;
+  $('result').style.display = 'none';
+  setProg(2); setStat('读取像素…');
+
+  // 抽像素：超大图先降采样到安全上限（手机内存保护）
+  const MAX_PIXELS = 16e6;   // 约 4000×4000
+  let srcW = curW, srcH = curH, srcImg = curImg;
+  if (curW * curH > MAX_PIXELS) {
+    const k = Math.sqrt(MAX_PIXELS / (curW * curH));
+    srcW = Math.round(curW * k); srcH = Math.round(curH * k);
+    const tc = document.createElement('canvas');
+    tc.width = srcW; tc.height = srcH;
+    tc.getContext('2d').drawImage(curImg, 0, 0, srcW, srcH);
+    srcImg = tc;
+    setStat('超大图，已自动缩到 ' + srcW + '×' + srcH + ' 处理…');
+  }
+  const cv = document.createElement('canvas');
+  cv.width = srcW; cv.height = srcH;
+  const cx = cv.getContext('2d', { willReadFrequently: true });
+  cx.drawImage(srcImg, 0, 0);
+  const data = cx.getImageData(0, 0, srcW, srcH).data;
+  curRGBA = new Uint8ClampedArray(data.buffer.slice(0));
+  // 后续用实际抽样的尺寸作为画布尺寸
+  const procW = srcW, procH = srcH;
+
+  const opts = {
+    layers: +$('layers').value,
+    scale: +$('scale').value,
+    seconds: +$('secs').value,
+    autoRois: +$('rois').value,
+    workRes: +$('workRes').value,
+    seed: +$('seed').value || 20261109,
+  };
+
+  if (worker) worker.terminate();
+  worker = new Worker('worker.js');
+  worker.onmessage = e => {
+    const m = e.data;
+    if (m.type === 'progress') {
+      setProg(m.progress);
+      setStat(m.phase + ' · ' + m.progress + '%');
+      if (m.layers) renderLayers(m.layers);
+    } else if (m.type === 'done') {
+      result = m.payload;
+      setStat('完成 · 用时 ' + result.elapsed.toFixed(1) + 's');
+      showResult(result);
+      $('go').disabled = false;
+      $('go').textContent = '再生成一次';
+    } else if (m.type === 'error') {
+      setStat('出错：' + m.message.split('\n')[0], true);
+      $('go').disabled = false; setProg(0);
+      console.error(m.message);
+    }
+  };
+  worker.onerror = e => {
+    setStat('Worker 出错：' + e.message, true);
+    $('go').disabled = false;
+  };
+  worker.postMessage({ type: 'generate', rgba: curRGBA, w: procW, h: procH, opts }, [curRGBA.buffer]);
+};
+
+function renderLayers(layers) {
+  // 放进结果区，简单展示
+}
+
+/* ---------------- 结果展示 + 实时画布 ---------------- */
+function showResult(r) {
+  $('result').style.display = 'block';
+  $('hint').style.display = 'none';
+  // 手机上结果在下方，滚动过去让用户看到
+  setTimeout(() => {
+    try { $('result').scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (_) {}
+  }, 150);
+  $('rStrokes').textContent = r.strokes.length.toLocaleString();
+  const ok = r.breaks === 0 ? '<b style="color:var(--ok)">通过</b>' : '<b style="color:var(--err)">' + r.breaks + ' 处断裂</b>';
+  const totalMB = (new Blob([JSON.stringify(r.strokes)]).size / 1024 / 1024).toFixed(1);
+  $('rKv').innerHTML =
+    '<span>细节笔</span><b>' + r.detail.toLocaleString() + '</b>' +
+    '<span>时长</span><b>' + r.total.toFixed(1) + 's</b>' +
+    '<span>画布</span><b>' + r.w + '×' + r.h + '</b>' +
+    '<span>笔触数据</span><b>~' + totalMB + ' MB</b>' +
+    '<span>串行校验</span>' + ok +
+    '<span>生成耗时</span><b>' + r.elapsed.toFixed(1) + 's</b>';
+  startLivePreview(r);
+}
+
+let liveRAF = null, liveIdx = 0, liveT = 0, liveDone = false;
+let LP = [], LCOL = [], LITE = [], LALP = [], LKIN = [];
+let liveCv, liveCtx, liveBase, liveBctx, liveSC = 1;
+let livePaused = false;
+
+function startLivePreview(r) {
+  $('liveWrap').style.display = 'block';
+  const maxW = Math.min(1000, $('result').clientWidth - 40);
+  const sc = maxW / r.w;
+  const dispW = Math.round(r.w * sc), dispH = Math.round(r.h * sc);
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  liveCv = $('live');
+  liveCv.width = Math.round(dispW * dpr);
+  liveCv.height = Math.round(dispH * dpr);
+  liveCv.style.width = dispW + 'px';
+  liveCv.style.height = dispH + 'px';
+  liveCtx = liveCv.getContext('2d', { alpha: false });
+
+  liveBase = document.createElement('canvas');
+  liveBase.width = liveCv.width; liveBase.height = liveCv.height;
+  liveBctx = liveBase.getContext('2d', { alpha: false });
+  liveSC = (liveCv.width / r.w);
+
+  // 解析路径
+  LP = []; LCOL = []; LITE = []; LALP = []; LKIN = [];
+  const RE = /[ML]|-?\d+(?:\.\d+)?/g;
+  for (let i = 0; i < r.strokes.length; i++) {
+    const s = r.strokes[i], tok = s[0].match(RE), pts = new Float32Array(tok.length / 3 * 2);
+    for (let k = 0, j = 0; k < tok.length; k += 3, j += 2) { pts[j] = +tok[k + 1]; pts[j + 1] = +tok[k + 2]; }
+    LP.push(pts); LCOL.push(s[1]);
+    LITE.push(ridge(s[1]));
+    LALP.push(s[8] === undefined ? 1 : s[8]);
+    LKIN.push(s[9] | 0);
+  }
+
+  // 底色
+  liveBctx.fillStyle = '#181613';
+  liveBctx.fillRect(0, 0, liveBase.width, liveBase.height);
+
+  // 工序 chips
+  $('liveStages').innerHTML = r.stages.map((s, i) =>
+    '<span class="stgChip" data-i="' + i + '">' + s.label + '</span>').join('');
+
+  liveIdx = 0; liveT = 0; liveDone = false; livePaused = false;
+  $('liveState').textContent = '绘制中';
+  $('liveState').style.cssText = 'background:rgba(217,164,65,.14);color:#d9a441;border-color:rgba(217,164,65,.3)';
+  if (liveRAF) cancelAnimationFrame(liveRAF);
+  let t0 = null;
+  const loop = now => {
+    if (t0 === null) t0 = now;
+    const t = (now - t0) / 1000;
+    advanceLive(t * (r.total / Math.max(12, Math.min(r.total, 90))) * (r.total / 90));
+    liveRAF = requestAnimationFrame(loop);
+  };
+  // 直接用真实时长播放
+  const loop2 = now => {
+    if (t0 === null) t0 = now;
+    if (!livePaused) advanceLive((now - t0) / 1000);
+    liveRAF = requestAnimationFrame(loop2);
+  };
+  liveRAF = requestAnimationFrame(loop2);
+}
+
+function tone(h, f, add) {
+  const r = parseInt(h.slice(1, 3), 16), g = parseInt(h.slice(3, 5), 16), b = parseInt(h.slice(5, 7), 16);
+  const c = v => Math.max(0, Math.min(255, Math.round(v * f + add)));
+  return `rgb(${c(r)},${c(g)},${c(b)})`;
+}
+
+/* 亮脊色：底色越亮提亮越少，接近纯白时几乎不提亮 —— 避免浅色区域（皮肤）被顶成纯白线 */
+function ridge(h) {
+  const r = parseInt(h.slice(1, 3), 16), g = parseInt(h.slice(3, 5), 16), b = parseInt(h.slice(5, 7), 16);
+  const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+  const k = Math.max(0, Math.min(1, (235 - lum) / 235));
+  const f = 1 + 0.22 * k;
+  const add = 22 * k * k;
+  const c = v => {
+    let out = v * f + add;
+    out = Math.min(out, 244, v + 34);
+    return Math.max(0, Math.min(255, Math.round(out)));
+  };
+  return `rgb(${c(r)},${c(g)},${c(b)})`;
+}
+
+function liveStroke(c, i, prog) {
+  const pts = LP[i];
+  const npt = pts.length >> 1;
+  const lim = Math.max(2, Math.ceil(npt * prog));
+  const st = result.strokes[i];
+  const w = st[2] * liveSC;
+  const a = LALP[i], kind = LKIN[i];
+  c.lineCap = 'round'; c.lineJoin = 'round';
+  c.beginPath();
+  c.moveTo(pts[0] * liveSC, pts[1] * liveSC);
+  for (let j = 1; j < lim && j < npt; j++) c.lineTo(pts[j*2] * liveSC, pts[j*2+1] * liveSC);
+
+  if (kind === 2) {
+    c.globalAlpha = a;
+    for (let b = 0; b < 3; b++) {
+      const off = (b - 1) * w * 0.34;
+      c.save(); c.translate(0, off);
+      c.strokeStyle = b === 1 ? LCOL[i] : LITE[i];
+      c.lineWidth = w * (b === 1 ? 0.5 : 0.26);
+      c.stroke(); c.restore();
+    }
+    c.globalAlpha = 1; return;
+  }
+  if (kind === 3) {
+    c.globalAlpha = a * 0.55; c.strokeStyle = tone(LCOL[i], 0.55, 0);
+    c.lineWidth = w * 1.16; c.stroke();
+    c.globalAlpha = a; c.strokeStyle = LCOL[i]; c.lineWidth = w; c.stroke();
+    c.save(); c.translate(-w * 0.14, -w * 0.14);
+    c.strokeStyle = LITE[i]; c.lineWidth = w * 0.36; c.stroke(); c.restore();
+    c.globalAlpha = 1; return;
+  }
+
+  c.globalAlpha = a; c.strokeStyle = LCOL[i]; c.lineWidth = w; c.stroke();
+
+  if (w > 4.5 && lim >= 4) {
+    c.strokeStyle = LCOL[i];
+    c.beginPath(); c.moveTo(pts[0]*liveSC, pts[1]*liveSC);
+    for (let j = 1; j < Math.min(3, npt); j++) c.lineTo(pts[j*2]*liveSC, pts[j*2+1]*liveSC);
+    c.lineWidth = w * 0.45; c.stroke();
+    const e = Math.min(lim, npt) - 1;
+    c.beginPath(); c.moveTo(pts[e*2]*liveSC, pts[e*2+1]*liveSC);
+    for (let j = e - 1; j >= Math.max(0, e - 2); j--) c.lineTo(pts[j*2]*liveSC, pts[j*2+1]*liveSC);
+    c.lineWidth = w * 0.4; c.stroke();
+  }
+  if (w > 7.5 && kind === 0) {
+    // 渐枯只能在深色笔上做；浅色笔上叠亮色会形成白拖尾
+    const c0 = [parseInt(LCOL[i].slice(1,3),16), parseInt(LCOL[i].slice(3,5),16), parseInt(LCOL[i].slice(5,7),16)];
+    const lum = 0.299*c0[0] + 0.587*c0[1] + 0.114*c0[2];
+    const dryK = Math.max(0, Math.min(1, (180 - lum) / 180));
+    if (dryK > 0.08) {
+      c.globalAlpha = a * 0.30 * dryK; c.strokeStyle = LITE[i];
+      const s0 = Math.floor(npt * 0.62), e0 = lim;
+      if (e0 > s0 + 1) {
+        c.beginPath(); c.moveTo(pts[s0*2]*liveSC, pts[s0*2+1]*liveSC);
+        for (let j = s0 + 1; j < e0 && j < npt; j++) c.lineTo(pts[j*2]*liveSC, pts[j*2+1]*liveSC);
+        c.lineWidth = w * 0.44; c.stroke();
+      }
+    }
+    c.globalAlpha = 1;
+  }
+}
+
+function advanceLive(t) {
+  if (!result) return;
+  const N = result.strokes.length;
+  liveT = Math.min(t, result.total + 0.3);
+  while (liveIdx < N && result.strokes[liveIdx][3] <= liveT) {
+    liveStroke(liveBctx, liveIdx, 1);
+    liveIdx++;
+  }
+  liveCtx.drawImage(liveBase, 0, 0);
+  if (liveIdx < N) {
+    const s = result.strokes[liveIdx];
+    const pr = Math.max(0.02, Math.min(1, (liveT - s[3]) / Math.max(s[4], 1e-6)));
+    liveStroke(liveCtx, liveIdx, pr);
+  } else if (!liveDone) {
+    liveDone = true;
+    $('liveState').textContent = '完成';
+    $('liveState').style.cssText = 'background:rgba(110,220,150,.13);color:#8ee6a8;border-color:rgba(110,220,150,.3)';
+  }
+  $('liveCount').textContent = liveIdx + ' / ' + N;
+  $('liveSec').textContent = liveT.toFixed(1) + 's / ' + result.total.toFixed(1) + 's';
+  $('liveBar').style.width = (Math.min(1, liveT / result.total) * 100).toFixed(2) + '%';
+  // 工序高亮
+  let act = 0;
+  for (let i = 0; i < result.stages.length; i++) if (result.stages[i].t <= liveT) act = i;
+  const chips = $('liveStages').children;
+  for (let i = 0; i < chips.length; i++) {
+    const s = result.stages[i];
+    chips[i].className = 'stgChip' + (i === act ? ' on' : (s.t < liveT ? ' done' : ''));
+  }
+}
+
+$('replay').onclick = () => {
+  if (!result) return;
+  liveIdx = 0; liveT = 0; liveDone = false;
+  liveBctx.fillStyle = '#181613';
+  liveBctx.fillRect(0, 0, liveBase.width, liveBase.height);
+  $('liveState').textContent = '绘制中';
+  let t0 = null;
+  if (liveRAF) cancelAnimationFrame(liveRAF);
+  const loop = now => {
+    if (t0 === null) t0 = now;
+    if (!livePaused) advanceLive((now - t0) / 1000);
+    liveRAF = requestAnimationFrame(loop);
+  };
+  liveRAF = requestAnimationFrame(loop);
+};
+
+/* ---------------- 下载 ---------------- */
+$('dlPreview').onclick = () => {
+  liveCv.toBlob(b => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(b);
+    a.download = 'strokeoil-preview.png';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  }, 'image/png');
+};
+
+$('dlPlayer').onclick = async () => {
+  if (!result) return;
+  $('dlPlayer').disabled = true;
+  $('dlPlayer').textContent = '生成中…';
+  try {
+    const blob = await buildPlayerBlob(result, curFile);
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'strokeoil-player.html';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 8000);
+  } catch (e) {
+    alert('生成播放器失败：' + e.message);
+  } finally {
+    $('dlPlayer').disabled = false;
+    $('dlPlayer').textContent = '⬇ 下载播放器 HTML';
+  }
+};
+
+async function buildPlayerBlob(r, file) {
+  // 图片转 base64
+  const buf = await file.arrayBuffer();
+  const b64 = await new Promise(res => {
+    const fr = new FileReader();
+    fr.onload = () => res(String(fr.result).split(',')[1]);
+    fr.readAsDataURL(new Blob([buf], { type: file.type || 'image/png' }));
+  });
+  const mime = file.type || 'image/png';
+  const ground = '#181613';
+  const data = {
+    w: r.w, h: r.h, total: r.total, ground,
+    stages: r.stages.map(s => ({ name: s.name, label: s.label, t: s.t, n: s.n })),
+    strokes: r.strokes,
+  };
+  const tpl = await (await fetch('player-template.html')).text();
+  const html = tpl
+    .replace('__DATA__', JSON.stringify(data))
+    .replace('__IMGMIME__', mime)
+    .replace('__IMG__', b64)
+    .replace('__STAGEMETA__', JSON.stringify(r.stages))
+    .replace('__N__', r.strokes.length.toLocaleString())
+    .replace('__NSTAGE__', String(r.stages.length))
+    .replace('__TOT__', r.total.toFixed(1))
+    .replace('__IW__', String(r.w))
+    .replace('__IH__', String(r.h));
+  return new Blob([html], { type: 'text/html;charset=utf-8' });
+}
+</script>
+</body>
+</html>
