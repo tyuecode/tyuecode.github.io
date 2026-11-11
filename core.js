@@ -14,6 +14,18 @@
   const KIND_NORMAL = 0, KIND_GLAZE = 1, KIND_SCUMBLE = 2, KIND_IMPASTO = 3, KIND_FILL = 4;
   const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 
+  /* 安全批量追加。
+   * 不能用 `arr.push(...big)`：笔触数量多时（素描把细腻程度拉满会到十几万条）
+   * 会超出引擎对展开参数的限制，抛 "Maximum call stack size exceeded"。
+   * 分块追加不受这个限制。 */
+  function appendAll(dst, src) {
+    const CH = 4096;
+    for (let i = 0; i < src.length; i += CH) {
+      const chunk = src.slice(i, i + CH);
+      for (let j = 0; j < chunk.length; j++) dst.push(chunk[j]);
+    }
+  }
+
   /* ---------------------------------------------------------------- 高斯 */
   function gaussKernel(sigma) {
     const r = Math.max(1, Math.ceil(sigma * 3));
@@ -754,9 +766,20 @@
     const stages = [];
     const WT = {}, LB = {};
     OIL_STAGE.forEach(([n, l, w]) => { WT[n] = w; LB[n] = l; });
+    /* 笔触预算：细腻程度拉满时笔触会到 20 万条 / 22MB，手机端扛不住。
+     * 按工序权重等比稀释，保持「大笔在前、细笔在后」的比例关系。 */
+    const OIL_MAX = 130000;
+    const oilW = OIL_STAGE.reduce((a, x) => a + x[2], 0);
     const push = (name, ss) => {
-      stages.push({ name, label: LB[name] || name, weight: WT[name] || 5, strokes: ss });
-      if (onStage) onStage(name, ss.length, LB[name] || name);
+      const allow = Math.max(600, Math.round(OIL_MAX * (WT[name] || 5) / oilW));
+      let kept = ss;
+      if (ss.length > allow) {
+        const stride = ss.length / allow;
+        kept = [];
+        for (let i = 0; i < allow; i++) kept.push(ss[Math.min(ss.length - 1, Math.floor(i * stride))]);
+      }
+      stages.push({ name, label: LB[name] || name, weight: WT[name] || 5, strokes: kept });
+      if (onStage) onStage(name, kept.length, LB[name] || name);
     };
 
     const GB = groundColor(P, W, H, { mode: 'warm', darkFrac: 0.28 });
@@ -816,7 +839,7 @@
           Wd.push((w0 + P.rnd() * (w1 - w0)) * s);
           Lay.push(P.sampleA(A.labels, g.X[i], g.Y[i]));
         }
-        all.push(...P.make(g.X, g.Y, L, Wd, Lay, 5, 0, KIND_NORMAL, 0.8, 0.72, [70, 58, 46], 0.34, 'gris'));
+        appendAll(all, P.make(g.X, g.Y, L, Wd, Lay, 5, 0, KIND_NORMAL, 0.8, 0.72, [70, 58, 46], 0.34, 'gris'));
       }
       push('grisaille', all);
     }
@@ -833,7 +856,7 @@
           Wd.push((w0 + P.rnd() * (w1 - w0)) * s);
           Lay.push(P.sampleA(A.labels, g.X[i], g.Y[i]));
         }
-        all.push(...P.make(g.X, g.Y, L, Wd, Lay, 5, 0, KIND_NORMAL, 1.0, 0.04, null, 0, 'block'));
+        appendAll(all, P.make(g.X, g.Y, L, Wd, Lay, 5, 0, KIND_NORMAL, 1.0, 0.04, null, 0, 'block'));
       }
       push('block-in', all);
     }
@@ -852,7 +875,7 @@
           Wd.push((w0 + P.rnd() * (w1 - w0)) * s);
           Lay.push(P.sampleA(A.labels, g.X[i], g.Y[i]));
         }
-        all.push(...P.make(X, Y, L, Wd, Lay, 5, 0, KIND_NORMAL, 1.0, 0, null, 0, 'mass'));
+        appendAll(all, P.make(X, Y, L, Wd, Lay, 5, 0, KIND_NORMAL, 1.0, 0, null, 0, 'mass'));
       }
       push('massing', all);
     }
@@ -871,7 +894,7 @@
           Wd.push((w0 + P.rnd() * (w1 - w0)) * s);
           Lay.push(P.sampleA(A.labels, g.X[i], g.Y[i]));
         }
-        all.push(...P.make(X, Y, L, Wd, Lay, 5, 0, KIND_NORMAL, 0.94, 0, null, 0, 'mod'));
+        appendAll(all, P.make(X, Y, L, Wd, Lay, 5, 0, KIND_NORMAL, 0.94, 0, null, 0, 'mod'));
       }
       push('modelling', all);
     }
@@ -937,7 +960,7 @@
           Wd.push((0.85 + P.rnd() * 0.85) * s);
           Lay.push(P.sampleA(A.labels, g.X[i], g.Y[i]));
         }
-        det.push(...P.make(X, Y, L, Wd, Lay, 4, 1, KIND_NORMAL, 1.0, 0, null, 0, 'det'));
+        appendAll(det, P.make(X, Y, L, Wd, Lay, 4, 1, KIND_NORMAL, 1.0, 0, null, 0, 'det'));
       }
       for (const r of rois) {
         const g = P.grid(5.6 * s, 0.5, [r[0] + 1.7 * s, r[1] + 1.7 * s, r[2], r[3]]);
@@ -950,7 +973,7 @@
           Wd.push((0.9 + P.rnd() * 0.9) * s);
           Lay.push(P.sampleA(A.labels, g.X[i], g.Y[i]));
         }
-        det.push(...P.make(X, Y, L, Wd, Lay, 4, 1, KIND_NORMAL, 1.0, 0, null, 0, 'det2'));
+        appendAll(det, P.make(X, Y, L, Wd, Lay, 4, 1, KIND_NORMAL, 1.0, 0, null, 0, 'det2'));
       }
       for (const r of rois.slice(0, 5)) {
         const e = P.edgeSeeds(r, 0.5, 2.6 * s);
@@ -961,7 +984,7 @@
           Wd.push((0.8 + P.rnd() * 0.6) * s);
           Lay.push(P.sampleA(A.labels, e.X[i], e.Y[i]));
         }
-        det.push(...P.make(e.X, e.Y, L, Wd, Lay, 3, 1, KIND_NORMAL, 1.0, 0, null, 0, 'micro'));
+        appendAll(det, P.make(e.X, e.Y, L, Wd, Lay, 3, 1, KIND_NORMAL, 1.0, 0, null, 0, 'micro'));
       }
       push('detail', det);
     }
@@ -1013,9 +1036,19 @@
     const stages = [];
     const WT = {}, LB = {};
     LINE_STAGE.forEach(([n, l, w]) => { WT[n] = w; LB[n] = l; });
+    /* 与油画同样的笔触预算，防止细腻程度拉满时数据量过大 */
+    const LINE_MAX = 100000;
+    const lineW = LINE_STAGE.reduce((a, x) => a + x[2], 0);
     const push = (name, ss) => {
-      stages.push({ name, label: LB[name] || name, weight: WT[name] || 5, strokes: ss });
-      if (onStage) onStage(name, ss.length, LB[name] || name);
+      const allow = Math.max(500, Math.round(LINE_MAX * (WT[name] || 5) / lineW));
+      let kept = ss;
+      if (ss.length > allow) {
+        const stride = ss.length / allow;
+        kept = [];
+        for (let i = 0; i < allow; i++) kept.push(ss[Math.min(ss.length - 1, Math.floor(i * stride))]);
+      }
+      stages.push({ name, label: LB[name] || name, weight: WT[name] || 5, strokes: kept });
+      if (onStage) onStage(name, kept.length, LB[name] || name);
     };
 
     /* 线色：冷白。原图越暗线越亮，越亮线越柔 */
@@ -1088,7 +1121,7 @@
           Wd.push(lw(0.78));
           Lay.push(P.sampleA(A.labels, e.X[i], e.Y[i]));
         }
-        all.push(...P.makeRaw(e.X, e.Y, L, Wd, Lay, 5, 1, KIND_NORMAL, 0.78,
+        appendAll(all, P.makeRaw(e.X, e.Y, L, Wd, Lay, 5, 1, KIND_NORMAL, 0.78,
           Q => inkHex(P.lum(Q[0], Q[1])), 'line-fine',
           Object.assign({}, EDGE_OPT, { edgeField: A.eFine })));
       }
@@ -1408,9 +1441,23 @@
     const stages = [];
     const WT = {}, LB = {};
     PENCIL_STAGE.forEach(([n, l, w]) => { WT[n] = w; LB[n] = l; });
+
+    /* 笔触预算：排线是网格播种，细腻程度拉满时数量会爆炸（约 20 万条 / 21MB），
+     * 手机端容易卡顿甚至 OOM。这里按总预算等比稀释，而不是砍掉某个阶段，
+     * 各阶段之间的比例关系保持不变。 */
+    const MAX_STROKES = 90000;
+    const totalWeight = PENCIL_STAGE.reduce((a, x) => a + x[2], 0);
     const push = (name, ss) => {
-      stages.push({ name, label: LB[name] || name, weight: WT[name] || 5, strokes: ss });
-      if (onStage) onStage(name, ss.length, LB[name] || name);
+      const share = (WT[name] || 5) / totalWeight;
+      const allow = Math.max(300, Math.round(MAX_STROKES * share));
+      let kept = ss;
+      if (ss.length > allow) {
+        const stride = ss.length / allow;
+        kept = [];
+        for (let i = 0; i < allow; i++) kept.push(ss[Math.min(ss.length - 1, Math.floor(i * stride))]);
+      }
+      stages.push({ name, label: LB[name] || name, weight: WT[name] || 5, strokes: kept });
+      if (onStage) onStage(name, kept.length, LB[name] || name);
     };
 
     /* 石墨色：原图越暗越黑。纸张很亮，调子从 ~208 往下压 */
@@ -1450,7 +1497,7 @@
           Wd.push((w0 + P.rnd() * (w1 - w0)) * s);
           Lay.push(P.sampleA(A.labels, g.X[i], g.Y[i]));
         }
-        all.push(...P.makeRaw(X, Y, L, Wd, Lay, 6, 0, KIND_NORMAL, a,
+        appendAll(all, P.makeRaw(X, Y, L, Wd, Lay, 6, 0, KIND_NORMAL, a,
           Q => graphite(P.lum(Q[0], Q[1]), dep), 'pc-tone', { maxTurn: 0.22 }));
       }
       push('tone', all);
@@ -1471,7 +1518,7 @@
           Wd.push((wd + P.rnd() * 0.45) * Math.max(0.85, s));
           Lay.push(P.sampleA(A.labels, g.X[i], g.Y[i]));
         }
-        all.push(...P.makeRaw(X, Y, L, Wd, Lay, 4, 0, KIND_NORMAL, a,
+        appendAll(all, P.makeRaw(X, Y, L, Wd, Lay, 4, 0, KIND_NORMAL, a,
           Q => graphite(P.lum(Q[0], Q[1]), 0.9), 'pc-hatch', { maxTurn: 0.16 }));
       }
       push('hatch', all);
