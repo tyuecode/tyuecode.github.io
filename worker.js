@@ -1,4 +1,4 @@
-/* 生成 worker：把分析+笔触+时间轴跑在后台线程，避免界面卡死 */
+/* 生成 worker：把分析 + 笔触 + 时间轴跑在后台线程，避免界面卡死 */
 importScripts('core.js');
 
 self.onmessage = function (e) {
@@ -11,30 +11,34 @@ self.onmessage = function (e) {
     self.postMessage(Object.assign({ type: 'progress', phase, progress }, extra || {}));
 
   try {
-    post('分析画面', 5);
+    const styleKey = (opts.style && OILCore.STYLES[opts.style]) ? opts.style : 'oil';
+    const styleDef = OILCore.STYLES[styleKey];
+
+    post('分析画面', 4);
     const A = OILCore.analyze(rgba, w, h, opts);
 
     // 分层统计
-    const cnt = new Float64Array(opts.layers || 5);
+    const k = A.layers.length;
+    const cnt = new Float64Array(k);
     for (let i = 0; i < A.labels.length; i++) cnt[A.labels[i]]++;
     const tot = A.labels.length;
     const layers = A.layers.map((l, i) => ({
       id: l.id, L: +l.L.toFixed(1), S: +l.S.toFixed(1), frac: cnt[i] / tot,
     }));
-    post('分析画面', 12, { layers });
+    post('分析画面', 11, { layers });
 
-    const names = ['刷底色','起稿','单色底层','铺大色','塑造','塑形','罩染','干扫','细部','提白'];
+    const nStage = Math.max(1, styleDef.nStages);
     let idx = 0;
-    const stages = OILCore.buildStages(A, rgba, w, h, opts, (name, n) => {
+    const stages = OILCore.buildStages(A, rgba, w, h, opts, (name, n, label) => {
       idx++;
-      post('笔触 · ' + (OILCore.STAGE_CN[name] || name), 12 + Math.round(64 * idx / 10),
-           { stage: name, count: n });
+      post('笔触 · ' + (label || name), 11 + Math.round(72 * idx / nStage),
+           { stage: name, stageLabel: label, count: n });
     });
 
-    post('编排时间轴', 80);
+    post('编排时间轴', 86);
     const tl = OILCore.buildTimeline(stages, opts.seconds || 90);
 
-    // 严格串行校验
+    // 严格串行校验：不允许重叠或断裂
     let breaks = 0;
     for (let i = 1; i < tl.strokes.length; i++) {
       const prevEnd = tl.strokes[i - 1].start + tl.strokes[i - 1].dur;
@@ -48,6 +52,10 @@ self.onmessage = function (e) {
       type: 'done',
       payload: {
         w, h, total: tl.total, layers,
+        style: styleKey,
+        styleLabel: styleDef.label,
+        ground: styleDef.ground || { type: 'oil', color: '#181613' },
+        steps: styleDef.steps,
         stages: tl.marks.map(m => ({ name: m.name, label: m.label, t: m.t, n: m.n })),
         strokes: pack,
         detail: tl.strokes.filter(s => s.detail).length,

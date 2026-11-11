@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#0f0d0b">
-<title>strokeoil · 油画工序重绘</title>
-<meta name="description" content="在浏览器里把图片重绘成按真实油画十道工序逐笔绘制的动画，全部本地处理，不上传。">
+<title>strokeoil · 图片逐笔重绘</title>
+<meta name="description" content="在浏览器里把图片按不同绘画风格逐笔重绘成动画：油画、线描、色块、素描。全部本地处理，不上传。">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23d9a441'/%3E%3Cpath d='M7 22c4-9 8-12 11-12s5 3 7 12' stroke='%2317130c' stroke-width='3' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
 <style>
   *{box-sizing:border-box}
@@ -22,7 +22,7 @@
   header{display:flex;align-items:baseline;gap:14px;margin-bottom:4px;flex-wrap:wrap}
   h1{font-size:26px;margin:0;letter-spacing:.5px}
   .sub{color:var(--dim);font-size:13px}
-  .flow{margin:6px 0 24px;color:var(--dim2);font-size:12.5px;letter-spacing:.3px;line-height:1.7}
+  .flow{margin:6px 0 22px;color:var(--dim2);font-size:12.5px;letter-spacing:.3px;line-height:1.7}
   .grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start}
   @media(max-width:940px){.grid{grid-template-columns:1fr}}
   .card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px}
@@ -54,6 +54,25 @@
                  color:#17130c;font-weight:700;width:100%;margin-top:8px;font-size:15px;padding:13px}
   button.primary:hover:not(:disabled){filter:brightness(1.07)}
   button:disabled{opacity:.45;cursor:not-allowed}
+
+  /* ---------- 风格选择 ---------- */
+  .styles{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:6px;align-items:start}
+  .stile{position:relative;border:1px solid var(--line2);border-radius:12px;padding:11px 12px;
+         cursor:pointer;background:rgba(255,255,255,.012);transition:all .18s;overflow:hidden}
+  .stile:hover{border-color:var(--gold);background:rgba(217,164,65,.05)}
+  .stile.on{border-color:var(--gold);background:rgba(217,164,65,.10);
+            box-shadow:0 0 0 1px rgba(217,164,65,.35) inset}
+  .stile .nm{font-size:13.5px;font-weight:700;display:flex;align-items:center;gap:7px}
+  .stile .nm .dot{width:8px;height:8px;border-radius:50%;background:var(--dim2);flex:none}
+  .stile.on .nm .dot{background:var(--gold);box-shadow:0 0 9px var(--gold)}
+  .stile .ds{font-size:11px;color:var(--dim2);margin-top:4px;line-height:1.5}
+  .stile .chips{display:flex;flex-wrap:wrap;gap:3px;margin-top:7px}
+  .stile .chips i{font-style:normal;font-size:9.5px;padding:1px 5px;border-radius:4px;
+    color:var(--dim2);background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06);
+    white-space:nowrap}
+  .stile.on .chips i{color:var(--gold);background:rgba(217,164,65,.10);border-color:rgba(217,164,65,.2)}
+  @media(max-width:520px){.styles{grid-template-columns:1fr}}
+
   .bar{height:6px;border-radius:3px;background:#241e16;overflow:hidden;margin-top:14px}
   .bar i{display:block;height:100%;width:0%;
          background:linear-gradient(90deg,#a8761f,#e8c26a);transition:width .3s}
@@ -73,11 +92,6 @@
     background:#221c15;border:1px solid var(--line2);text-decoration:none;color:var(--txt);
     font-size:12.5px}
   .files a:hover,.files button:hover{border-color:var(--gold)}
-  .layerRow{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--dim);
-            font-variant-numeric:tabular-nums;margin:3px 0}
-  .sw{width:11px;height:11px;border-radius:3px;flex:none;outline:1px solid rgba(255,255,255,.22)}
-  .lbar{flex:1;height:4px;border-radius:2px;background:rgba(255,255,255,.07);overflow:hidden}
-  .lbar i{display:block;height:100%;background:linear-gradient(90deg,#6b5b45,#d8cbb4)}
   .stgChip{display:inline-block;padding:2px 7px;border-radius:6px;font-size:10.5px;
     color:var(--dim2);background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);
     margin:2px 3px 2px 0;font-variant-numeric:tabular-nums}
@@ -96,8 +110,6 @@
   footer{margin-top:34px;font-size:11.5px;color:var(--dim2);line-height:1.9;text-align:center}
   footer a{color:var(--dim)}
 
-  /* ---------------- 移动端适配 ---------------- */
-  /* 让触控目标达到 44px 最小可点区域 */
   @media(max-width:720px){
     .wrap{padding:16px 14px 60px}
     h1{font-size:21px}
@@ -106,43 +118,31 @@
     .grid{grid-template-columns:1fr;gap:14px}
     .card{padding:14px;border-radius:14px}
     .card h2{font-size:12.5px;margin-bottom:11px}
-
-    /* 拖拽区更大更易点 */
     #drop{padding:28px 16px;border-radius:12px}
     #drop .ico{font-size:30px}
     #drop .t1{font-size:13.5px}
     #drop .t2{font-size:11px;line-height:1.6}
-    .pickBtn{display:block}     /* 手机上显示明确的按钮 */
-
-    /* 参数行改成上下堆叠，label 不占固定宽度 */
+    .pickBtn{display:block}
     .row{flex-wrap:wrap;gap:8px;margin:13px 0}
     .row label{width:100%;font-size:12px}
     .row .val{width:auto;margin-left:auto}
-    .row input[type=range]{flex:1;height:32px}         /* 加高滑动条触控区 */
+    .row input[type=range]{flex:1;height:32px}
     .row select,.row input[type=number],.row input[type=text]{
-      width:100%;padding:10px 12px;font-size:14px;      /* 手机输入避免缩放 */
+      width:100%;padding:10px 12px;font-size:14px;
       min-height:44px;border-radius:10px}
     .row input[type=number]{width:100%}
-
     button{min-height:46px;padding:12px 18px;font-size:14.5px;border-radius:12px}
     button.primary{padding:14px;font-size:15.5px}
-
-    /* 结果数字与 KV */
     #result .big{font-size:30px}
     .kv{grid-template-columns:1fr 1fr;gap:7px 10px;font-size:12px}
-
-    /* 下载按钮竖排，方便拇指点 */
     .files{flex-direction:column}
     .files a,.files button{min-width:0;padding:13px;font-size:13.5px;min-height:46px}
-
-    /* 预览画布占满宽度 */
     .tips{font-size:11.5px}
-
-    /* 高级选项 summary 也加大触控区 */
     .adv summary{min-height:40px;display:flex;align-items:center;font-size:13px}
+    .stile{padding:12px}
+    .stile .nm{font-size:14px}
+    .stile .ds{font-size:11.5px}
   }
-
-  /* 中屏（平板）：两栏但缩小间距 */
   @media(min-width:721px) and (max-width:940px){
     .wrap{padding:24px 18px 70px}
     .grid{gap:14px}
@@ -154,9 +154,9 @@
 <div class="wrap">
   <header>
     <h1>strokeoil</h1>
-    <div class="sub">油画工序逐笔重绘 · 纯浏览器运行</div>
+    <div class="sub">图片逐笔重绘 · 四种风格 · 纯浏览器运行</div>
   </header>
-  <div class="flow">刷底色 → 起稿 → 单色底层 → 铺大色 → 塑造 → 塑形 → 罩染 → 干扫 → 细部 → 提白</div>
+  <div class="flow" id="flowLine">选一种风格，图片会被逐笔重绘成可播放的动画</div>
 
   <div class="grid">
     <div>
@@ -176,7 +176,10 @@
       </div>
 
       <div class="card" style="margin-top:16px">
-        <h2>② 调参数</h2>
+        <h2>② 选风格</h2>
+        <div class="styles" id="styleBox"></div>
+
+        <h2 style="margin-top:18px">③ 调参数</h2>
         <div class="row">
           <label>细腻程度</label>
           <input type="range" id="scale" min="0.55" max="1.8" step="0.05" value="1">
@@ -210,6 +213,9 @@
             </select>
             <div class="val"></div>
           </div>
+          <div class="tips" style="margin-top:-8px;margin-bottom:6px" id="layerHint">
+            色块风格用它决定配色档数。
+          </div>
           <div class="row">
             <label>细节区数量</label>
             <input type="range" id="rois" min="0" max="14" step="1" value="6">
@@ -229,9 +235,9 @@
 
     <div>
       <div class="card" id="result">
-        <h2>③ 完成</h2>
+        <h2>④ 完成</h2>
         <div class="big" id="rStrokes">–</div>
-        <div class="tips" style="margin-top:2px">条笔触</div>
+        <div class="tips" style="margin-top:2px" id="rUnit">条笔触</div>
 
         <div id="liveWrap">
           <div class="liveBar" style="margin-bottom:6px">
@@ -264,25 +270,75 @@
         <div class="tips">
           <b style="color:var(--dim)">全部本地处理</b>：图片只留在你的浏览器里，不会上传到任何服务器。
           这也意味着生成速度取决于你的电脑。<br><br>
-          <b style="color:var(--dim)">细腻程度</b>：数值越小笔触越细越密、细节越清楚，文件也越大。
-          想要更接近原图就往左拖，想要更粗犷的笔触感就往右拖。<br><br>
+          <b style="color:var(--dim)">四种风格</b>：<br>
+          油画——十道古典工序，笔触有厚涂和罩染；<br>
+          线描——近黑底上的细白线，只勾结构；<br>
+          色块——分层平涂的硬边色块，海报配色；<br>
+          素描——纸底石墨排线，暗部交叉线。<br><br>
+          <b style="color:var(--dim)">细腻程度</b>：数值越小笔触越细越密、细节越清楚，文件也越大。<br><br>
           <b style="color:var(--dim)">分析分辨率</b>：程序在大图上会自动降采样后再分析结构，
-          笔触种子和取色仍在原图上做，所以细节不会糊。想追求极限可以选「原始分辨率」。
+          笔触种子和取色仍在原图上做，所以细节不会糊。
         </div>
       </div>
     </div>
   </div>
 
   <footer>
-    strokeoil · 十道工序：底色 / 起稿 / 单色底层 / 铺大色 / 塑造 / 塑形 / 罩染 / 干扫 / 细部 / 提白<br>
-    纯前端实现，无需服务器 · <a href="https://github.com/" id="repoLink" target="_blank">源码</a>
+    strokeoil · 油画 / 线描 / 色块 / 素描<br>
+    纯前端实现，无需服务器 · <a href="https://github.com/tyuecode/tyuecode.github.io" id="repoLink" target="_blank">源码</a>
   </footer>
 </div>
 
+<script src="render.js"></script>
 <script>
 const $ = id => document.getElementById(id);
 let curFile = null, curImg = null, curRGBA = null, curW = 0, curH = 0;
-let worker = null, result = null;
+let worker = null, result = null, curStyle = 'oil';
+
+/* ---------------- 风格卡片 ---------------- */
+const STYLE_META = [
+  { key: 'oil',       label: '油画',  desc: '十道古典工序，起收锋、厚涂、罩染、干扫' },
+  { key: 'lineart',   label: '线描',  desc: '近黑底上的细白线，只勾结构，像版画稿' },
+  { key: 'posterize', label: '色块',  desc: '分层平涂的硬边色块，限量配色海报感' },
+  { key: 'pencil',    label: '素描',  desc: '纸底石墨排线，暗部交叉线压深' },
+];
+(function buildStyleCards() {
+  const box = $('styleBox');
+  // 工序名从 core.js 的 STYLES 拿不到（网页端不加载 core），所以内置一份展示用
+  const STEPS = {
+    oil: ['底色', '起稿', '单色底层', '铺大色', '塑造', '塑形', '罩染', '干扫', '细部', '提白'],
+    lineart: ['定形', '勾主线', '结构线', '细描', '点睛'],
+    posterize: ['铺底色', '暗部色块', '中间调', '亮部', '点缀'],
+    pencil: ['起形', '铺调子', '排线', '交叉线', '提亮'],
+  };
+  for (const s of STYLE_META) {
+    const el = document.createElement('div');
+    el.className = 'stile' + (s.key === curStyle ? ' on' : '');
+    el.dataset.key = s.key;
+    el.innerHTML = '<div class="nm"><span class="dot"></span>' + s.label + '</div>' +
+      '<div class="ds">' + s.desc + '</div>' +
+      '<div class="chips">' + STEPS[s.key].map(t => '<i>' + t + '</i>').join('') + '</div>';
+    el.onclick = () => selectStyle(s.key);
+    box.appendChild(el);
+  }
+})();
+
+function selectStyle(key) {
+  curStyle = key;
+  for (const el of $('styleBox').children) el.classList.toggle('on', el.dataset.key === key);
+  const s = STYLE_META.find(x => x.key === key);
+  const STEPS = {
+    oil: ['刷底色', '起稿', '单色底层', '铺大色', '塑造', '塑形', '罩染', '干扫', '细部', '提白'],
+    lineart: ['定形', '勾主线', '结构线', '细描', '点睛'],
+    posterize: ['铺底色', '暗部色块', '中间调', '亮部', '点缀'],
+    pencil: ['起形', '铺调子', '排线', '交叉线', '提亮'],
+  };
+  $('flowLine').textContent = s.label + ' · ' + STEPS[key].join(' → ');
+  $('layerHint').textContent = key === 'posterize'
+    ? '色块风格用它决定配色档数。'
+    : (key === 'pencil' ? '素描风格用 5 档即可，影响不大。' : '色彩分层的层数。');
+  if (result) { $('result').style.display = 'none'; }
+}
 
 /* ---------------- 移动端自适应 ---------------- */
 (function adaptMobile() {
@@ -290,7 +346,6 @@ let worker = null, result = null;
                    || (window.matchMedia && window.matchMedia('(max-width:720px)').matches);
   const lowMem = (navigator.deviceMemory && navigator.deviceMemory <= 4) || isMobile;
   if (lowMem) {
-    // 手机/小内存默认用最快精度，避免卡顿和内存溢出
     const sel = $('workRes');
     if (sel && sel.value === '1400') { sel.value = '1000'; }
   }
@@ -321,7 +376,6 @@ async function takeFile(f) {
   $('fn').textContent = f.name;
   $('fs').textContent = (f.size / 1024 / 1024).toFixed(1) + ' MB';
 
-  // 解码到 canvas 取像素（原分辨率）
   const img = new Image();
   img.decoding = 'sync';
   await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = url; });
@@ -349,8 +403,7 @@ $('go').onclick = async () => {
   $('result').style.display = 'none';
   setProg(2); setStat('读取像素…');
 
-  // 抽像素：超大图先降采样到安全上限（手机内存保护）
-  const MAX_PIXELS = 16e6;   // 约 4000×4000
+  const MAX_PIXELS = 16e6;
   let srcW = curW, srcH = curH, srcImg = curImg;
   if (curW * curH > MAX_PIXELS) {
     const k = Math.sqrt(MAX_PIXELS / (curW * curH));
@@ -367,10 +420,10 @@ $('go').onclick = async () => {
   cx.drawImage(srcImg, 0, 0);
   const data = cx.getImageData(0, 0, srcW, srcH).data;
   curRGBA = new Uint8ClampedArray(data.buffer.slice(0));
-  // 后续用实际抽样的尺寸作为画布尺寸
   const procW = srcW, procH = srcH;
 
   const opts = {
+    style: curStyle,
     layers: +$('layers').value,
     scale: +$('scale').value,
     seconds: +$('secs').value,
@@ -386,10 +439,11 @@ $('go').onclick = async () => {
     if (m.type === 'progress') {
       setProg(m.progress);
       setStat(m.phase + ' · ' + m.progress + '%');
-      if (m.layers) renderLayers(m.layers);
     } else if (m.type === 'done') {
       result = m.payload;
-      setStat('完成 · 用时 ' + result.elapsed.toFixed(1) + 's');
+      window.result = result;
+      window.curStyle = curStyle;
+      setStat('完成 · ' + result.styleLabel + ' · 用时 ' + result.elapsed.toFixed(1) + 's');
       showResult(result);
       $('go').disabled = false;
       $('go').textContent = '再生成一次';
@@ -406,28 +460,24 @@ $('go').onclick = async () => {
   worker.postMessage({ type: 'generate', rgba: curRGBA, w: procW, h: procH, opts }, [curRGBA.buffer]);
 };
 
-function renderLayers(layers) {
-  // 放进结果区，简单展示
-}
-
 /* ---------------- 结果展示 + 实时画布 ---------------- */
 function showResult(r) {
   $('result').style.display = 'block';
   $('hint').style.display = 'none';
-  // 手机上结果在下方，滚动过去让用户看到
   setTimeout(() => {
     try { $('result').scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (_) {}
   }, 150);
   $('rStrokes').textContent = r.strokes.length.toLocaleString();
+  $('rUnit').textContent = r.style === 'posterize' ? '块色域' : '条笔触';
   const ok = r.breaks === 0 ? '<b style="color:var(--ok)">通过</b>' : '<b style="color:var(--err)">' + r.breaks + ' 处断裂</b>';
   const totalMB = (new Blob([JSON.stringify(r.strokes)]).size / 1024 / 1024).toFixed(1);
   $('rKv').innerHTML =
+    '<span>风格</span><b>' + r.styleLabel + '</b>' +
     '<span>细节笔</span><b>' + r.detail.toLocaleString() + '</b>' +
     '<span>时长</span><b>' + r.total.toFixed(1) + 's</b>' +
     '<span>画布</span><b>' + r.w + '×' + r.h + '</b>' +
     '<span>笔触数据</span><b>~' + totalMB + ' MB</b>' +
-    '<span>串行校验</span>' + ok +
-    '<span>生成耗时</span><b>' + r.elapsed.toFixed(1) + 's</b>';
+    '<span>串行校验</span>' + ok;
   startLivePreview(r);
 }
 
@@ -454,23 +504,18 @@ function startLivePreview(r) {
   liveBctx = liveBase.getContext('2d', { alpha: false });
   liveSC = (liveCv.width / r.w);
 
-  // 解析路径
-  LP = []; LCOL = []; LITE = []; LALP = []; LKIN = [];
-  const RE = /[ML]|-?\d+(?:\.\d+)?/g;
-  for (let i = 0; i < r.strokes.length; i++) {
-    const s = r.strokes[i], tok = s[0].match(RE), pts = new Float32Array(tok.length / 3 * 2);
-    for (let k = 0, j = 0; k < tok.length; k += 3, j += 2) { pts[j] = +tok[k + 1]; pts[j + 1] = +tok[k + 2]; }
-    LP.push(pts); LCOL.push(s[1]);
-    LITE.push(ridge(s[1]));
-    LALP.push(s[8] === undefined ? 1 : s[8]);
-    LKIN.push(s[9] | 0);
+  // 预处理成绘制期结构
+  const pre = OILRender.preprocess(r.strokes);
+  LP = new Array(pre.length); LCOL = new Array(pre.length);
+  LITE = new Array(pre.length); LALP = new Array(pre.length); LKIN = new Array(pre.length);
+  for (let i = 0; i < pre.length; i++) {
+    LP[i] = pre[i].pts; LCOL[i] = pre[i].color; LITE[i] = pre[i].lite;
+    LALP[i] = pre[i].alpha; LKIN[i] = pre[i].kind;
   }
 
-  // 底色
-  liveBctx.fillStyle = '#181613';
-  liveBctx.fillRect(0, 0, liveBase.width, liveBase.height);
+  // 底色（按风格）
+  OILRender.paintGround(liveBctx, liveBase.width, liveBase.height, r.ground);
 
-  // 工序 chips
   $('liveStages').innerHTML = r.stages.map((s, i) =>
     '<span class="stgChip" data-i="' + i + '">' + s.label + '</span>').join('');
 
@@ -478,14 +523,8 @@ function startLivePreview(r) {
   $('liveState').textContent = '绘制中';
   $('liveState').style.cssText = 'background:rgba(217,164,65,.14);color:#d9a441;border-color:rgba(217,164,65,.3)';
   if (liveRAF) cancelAnimationFrame(liveRAF);
+
   let t0 = null;
-  const loop = now => {
-    if (t0 === null) t0 = now;
-    const t = (now - t0) / 1000;
-    advanceLive(t * (r.total / Math.max(12, Math.min(r.total, 90))) * (r.total / 90));
-    liveRAF = requestAnimationFrame(loop);
-  };
-  // 直接用真实时长播放
   const loop2 = now => {
     if (t0 === null) t0 = now;
     if (!livePaused) advanceLive((now - t0) / 1000);
@@ -494,87 +533,9 @@ function startLivePreview(r) {
   liveRAF = requestAnimationFrame(loop2);
 }
 
-function tone(h, f, add) {
-  const r = parseInt(h.slice(1, 3), 16), g = parseInt(h.slice(3, 5), 16), b = parseInt(h.slice(5, 7), 16);
-  const c = v => Math.max(0, Math.min(255, Math.round(v * f + add)));
-  return `rgb(${c(r)},${c(g)},${c(b)})`;
-}
-
-/* 亮脊色：底色越亮提亮越少，接近纯白时几乎不提亮 —— 避免浅色区域（皮肤）被顶成纯白线 */
-function ridge(h) {
-  const r = parseInt(h.slice(1, 3), 16), g = parseInt(h.slice(3, 5), 16), b = parseInt(h.slice(5, 7), 16);
-  const lum = 0.299 * r + 0.587 * g + 0.114 * b;
-  const k = Math.max(0, Math.min(1, (235 - lum) / 235));
-  const f = 1 + 0.22 * k;
-  const add = 22 * k * k;
-  const c = v => {
-    let out = v * f + add;
-    out = Math.min(out, 244, v + 34);
-    return Math.max(0, Math.min(255, Math.round(out)));
-  };
-  return `rgb(${c(r)},${c(g)},${c(b)})`;
-}
-
 function liveStroke(c, i, prog) {
-  const pts = LP[i];
-  const npt = pts.length >> 1;
-  const lim = Math.max(2, Math.ceil(npt * prog));
-  const st = result.strokes[i];
-  const w = st[2] * liveSC;
-  const a = LALP[i], kind = LKIN[i];
-  c.lineCap = 'round'; c.lineJoin = 'round';
-  c.beginPath();
-  c.moveTo(pts[0] * liveSC, pts[1] * liveSC);
-  for (let j = 1; j < lim && j < npt; j++) c.lineTo(pts[j*2] * liveSC, pts[j*2+1] * liveSC);
-
-  if (kind === 2) {
-    c.globalAlpha = a;
-    for (let b = 0; b < 3; b++) {
-      const off = (b - 1) * w * 0.34;
-      c.save(); c.translate(0, off);
-      c.strokeStyle = b === 1 ? LCOL[i] : LITE[i];
-      c.lineWidth = w * (b === 1 ? 0.5 : 0.26);
-      c.stroke(); c.restore();
-    }
-    c.globalAlpha = 1; return;
-  }
-  if (kind === 3) {
-    c.globalAlpha = a * 0.55; c.strokeStyle = tone(LCOL[i], 0.55, 0);
-    c.lineWidth = w * 1.16; c.stroke();
-    c.globalAlpha = a; c.strokeStyle = LCOL[i]; c.lineWidth = w; c.stroke();
-    c.save(); c.translate(-w * 0.14, -w * 0.14);
-    c.strokeStyle = LITE[i]; c.lineWidth = w * 0.36; c.stroke(); c.restore();
-    c.globalAlpha = 1; return;
-  }
-
-  c.globalAlpha = a; c.strokeStyle = LCOL[i]; c.lineWidth = w; c.stroke();
-
-  if (w > 4.5 && lim >= 4) {
-    c.strokeStyle = LCOL[i];
-    c.beginPath(); c.moveTo(pts[0]*liveSC, pts[1]*liveSC);
-    for (let j = 1; j < Math.min(3, npt); j++) c.lineTo(pts[j*2]*liveSC, pts[j*2+1]*liveSC);
-    c.lineWidth = w * 0.45; c.stroke();
-    const e = Math.min(lim, npt) - 1;
-    c.beginPath(); c.moveTo(pts[e*2]*liveSC, pts[e*2+1]*liveSC);
-    for (let j = e - 1; j >= Math.max(0, e - 2); j--) c.lineTo(pts[j*2]*liveSC, pts[j*2+1]*liveSC);
-    c.lineWidth = w * 0.4; c.stroke();
-  }
-  if (w > 7.5 && kind === 0) {
-    // 渐枯只能在深色笔上做；浅色笔上叠亮色会形成白拖尾
-    const c0 = [parseInt(LCOL[i].slice(1,3),16), parseInt(LCOL[i].slice(3,5),16), parseInt(LCOL[i].slice(5,7),16)];
-    const lum = 0.299*c0[0] + 0.587*c0[1] + 0.114*c0[2];
-    const dryK = Math.max(0, Math.min(1, (180 - lum) / 180));
-    if (dryK > 0.08) {
-      c.globalAlpha = a * 0.30 * dryK; c.strokeStyle = LITE[i];
-      const s0 = Math.floor(npt * 0.62), e0 = lim;
-      if (e0 > s0 + 1) {
-        c.beginPath(); c.moveTo(pts[s0*2]*liveSC, pts[s0*2+1]*liveSC);
-        for (let j = s0 + 1; j < e0 && j < npt; j++) c.lineTo(pts[j*2]*liveSC, pts[j*2+1]*liveSC);
-        c.lineWidth = w * 0.44; c.stroke();
-      }
-    }
-    c.globalAlpha = 1;
-  }
+  OILRender.drawStroke(c, result.strokes, liveSC, i, prog,
+    { pts: LP[i], color: LCOL[i], lite: LITE[i], alpha: LALP[i], kind: LKIN[i] });
 }
 
 function advanceLive(t) {
@@ -598,7 +559,6 @@ function advanceLive(t) {
   $('liveCount').textContent = liveIdx + ' / ' + N;
   $('liveSec').textContent = liveT.toFixed(1) + 's / ' + result.total.toFixed(1) + 's';
   $('liveBar').style.width = (Math.min(1, liveT / result.total) * 100).toFixed(2) + '%';
-  // 工序高亮
   let act = 0;
   for (let i = 0; i < result.stages.length; i++) if (result.stages[i].t <= liveT) act = i;
   const chips = $('liveStages').children;
@@ -611,9 +571,9 @@ function advanceLive(t) {
 $('replay').onclick = () => {
   if (!result) return;
   liveIdx = 0; liveT = 0; liveDone = false;
-  liveBctx.fillStyle = '#181613';
-  liveBctx.fillRect(0, 0, liveBase.width, liveBase.height);
+  OILRender.paintGround(liveBctx, liveBase.width, liveBase.height, result.ground);
   $('liveState').textContent = '绘制中';
+  $('liveState').style.cssText = 'background:rgba(217,164,65,.14);color:#d9a441;border-color:rgba(217,164,65,.3)';
   let t0 = null;
   if (liveRAF) cancelAnimationFrame(liveRAF);
   const loop = now => {
@@ -629,7 +589,7 @@ $('dlPreview').onclick = () => {
   liveCv.toBlob(b => {
     const a = document.createElement('a');
     a.href = URL.createObjectURL(b);
-    a.download = 'strokeoil-preview.png';
+    a.download = 'strokeoil-' + (result ? result.style : 'preview') + '.png';
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 4000);
   }, 'image/png');
@@ -643,7 +603,7 @@ $('dlPlayer').onclick = async () => {
     const blob = await buildPlayerBlob(result, curFile);
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = 'strokeoil-player.html';
+    a.download = 'strokeoil-' + result.style + '-player.html';
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 8000);
   } catch (e) {
@@ -655,7 +615,6 @@ $('dlPlayer').onclick = async () => {
 };
 
 async function buildPlayerBlob(r, file) {
-  // 图片转 base64
   const buf = await file.arrayBuffer();
   const b64 = await new Promise(res => {
     const fr = new FileReader();
@@ -663,23 +622,30 @@ async function buildPlayerBlob(r, file) {
     fr.readAsDataURL(new Blob([buf], { type: file.type || 'image/png' }));
   });
   const mime = file.type || 'image/png';
-  const ground = '#181613';
   const data = {
-    w: r.w, h: r.h, total: r.total, ground,
+    w: r.w, h: r.h, total: r.total,
+    style: r.style, styleLabel: r.styleLabel, ground: r.ground,
     stages: r.stages.map(s => ({ name: s.name, label: s.label, t: s.t, n: s.n })),
     strokes: r.strokes,
   };
-  const tpl = await (await fetch('player-template.html')).text();
+  const [tpl, renderSrc] = await Promise.all([
+    fetch('player-template.html').then(x => x.text()),
+    fetch('render.js').then(x => x.text()),
+  ]);
   const html = tpl
-    .replace('__DATA__', JSON.stringify(data))
-    .replace('__IMGMIME__', mime)
-    .replace('__IMG__', b64)
-    .replace('__STAGEMETA__', JSON.stringify(r.stages))
-    .replace('__N__', r.strokes.length.toLocaleString())
-    .replace('__NSTAGE__', String(r.stages.length))
-    .replace('__TOT__', r.total.toFixed(1))
-    .replace('__IW__', String(r.w))
-    .replace('__IH__', String(r.h));
+    .replace('__RENDERJS__', () => renderSrc)
+    .replace('__DATA__', () => JSON.stringify(data))
+    .replace(/__IMGMIME__/g, () => mime)
+    .replace(/__IMG__/g, () => b64)
+    .replace(/__STAGEMETA__/g, () => JSON.stringify(r.stages))
+    .replace(/__N__/g, () => r.strokes.length.toLocaleString())
+    .replace(/__NSTAGE__/g, () => String(r.stages.length))
+    .replace(/__TOT__/g, () => r.total.toFixed(1))
+    .replace(/__IW__/g, () => String(r.w))
+    .replace(/__IH__/g, () => String(r.h))
+    .replace(/__STYLELABEL__/g, () => r.styleLabel || '绘画')
+    .replace(/__STYLESEQ__/g, () => r.stages.map(s => s.label).join(' → '))
+    .replace(/__UNIT__/g, () => (r.style === 'posterize' ? '块色域' : '条笔触'));
   return new Blob([html], { type: 'text/html;charset=utf-8' });
 }
 </script>

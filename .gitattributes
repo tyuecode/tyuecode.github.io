@@ -1,0 +1,8 @@
+# 静态站点：源码统一用 LF，避免 Windows 上自动转 CRLF 造成的无意义 diff
+*.js      text eol=lf
+*.html    text eol=lf
+*.md      text eol=lf
+*.yml     text eol=lf
+*.css     text eol=lf
+*.json    text eol=lf
+CNAME     text eol=lf
