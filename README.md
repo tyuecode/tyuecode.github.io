@@ -47,8 +47,31 @@
 | `render.js` | 共用的笔触渲染器（网页预览与播放器共用，保证所见即所得） |
 | `worker.js` | Web Worker，后台生成不卡界面 |
 | `player-template.html` | 下载用的单文件播放器模板（内联 `render.js`） |
+| `build.js` | 资源版本号（见下方「更新后请改版本号」） |
 | `CNAME` | 自定义域名（tangyue.me） |
 | `.github/workflows/deploy.yml` | GitHub Pages 自动部署 |
+
+### 更新后请改版本号
+
+GitHub Pages 给静态资源发的是 `Cache-Control: max-age=14400`（4 小时）强缓存，
+而且 URL 里没有文件指纹。所以**改了 `core.js` / `render.js` / `worker.js` 之后，
+老访客会在最长 4 小时内继续用旧脚本**，表现就是「新页面 + 旧 worker」：
+选了线描却还是出油画、风格一栏显示 `undefined`。
+
+为此 `index.html` 里所有脚本引用都带 `?v=` 查询串，由 `build.js` 的 `OIL_BUILD` 统一提供：
+
+```js
+window.OIL_BUILD = '20261111-4style';
+```
+
+**每次改动这些脚本，就把 `OIL_BUILD` 换一个新值**（如日期或递增序号），
+浏览器会把它当成全新 URL 去取。`worker.js` 也会把这个查询串透传给 `importScripts('core.js')`，
+保证 worker 和 core 版本一致。
+
+另外页面有两道兜底：
+- 启动时用一次性 worker 做 `hello` 握手，版本对不上就直接提示强制刷新；
+- 生成完成后校验 `result.style` 是否等于用户选的风格，不匹配就报错而不是静默出图。
+
 
 ## 技术实现
 

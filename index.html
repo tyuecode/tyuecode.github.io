@@ -289,11 +289,46 @@
   </footer>
 </div>
 
+<script src="build.js"></script>
 <script src="render.js"></script>
 <script>
 const $ = id => document.getElementById(id);
 let curFile = null, curImg = null, curRGBA = null, curW = 0, curH = 0;
 let worker = null, result = null, curStyle = 'oil';
+
+/* ---------------- 版本自检 ----------------
+ * 静态资源被 CDN 缓存住时，可能出现「新页面 + 旧脚本」。这里起一个一次性
+ * worker 做握手：新版 worker 会回 build 字段，旧版不会（它只认 generate）。
+ * 这样能在用户点「开始生成」之前就提醒，而不是等整张图跑完才发现风格没生效。
+ * 真正的兜底是生成时的 result.style 校验，这里只是提前给个提示。
+ */
+(function checkWorkerVersion() {
+  let w;
+  try {
+    w = new Worker('worker.js?v=' + encodeURIComponent(window.OIL_BUILD || Date.now()));
+  } catch (_) { return; }
+  let done = false;
+  const finish = ok => {
+    if (done) return;
+    done = true;
+    try { w.terminate(); } catch (_) {}
+    if (!ok) {
+      setTimeout(() => {
+        if (curImg) return;                 // 已经选好图就别覆盖提示
+        setStat('浏览器缓存了旧版脚本，建议按 Ctrl+F5（Mac 为 ⌘+Shift+R）强制刷新。', true);
+      }, 0);
+    }
+  };
+  const timer = setTimeout(() => finish(false), 3000);
+  w.onmessage = e => {
+    if (e.data && e.data.type === 'hello') {
+      clearTimeout(timer);
+      finish(e.data.build === window.OIL_BUILD && e.data.styles === 4);
+    }
+  };
+  w.onerror = () => { clearTimeout(timer); finish(false); };
+  w.postMessage({ type: 'hello' });
+})();
 
 /* ---------------- 风格卡片 ---------------- */
 const STYLE_META = [
@@ -433,7 +468,8 @@ $('go').onclick = async () => {
   };
 
   if (worker) worker.terminate();
-  worker = new Worker('worker.js');
+  // 带版本号，避免浏览器命中 4 小时强缓存里的旧 worker
+  worker = new Worker('worker.js?v=' + encodeURIComponent(window.OIL_BUILD || Date.now()));
   worker.onmessage = e => {
     const m = e.data;
     if (m.type === 'progress') {
@@ -441,6 +477,18 @@ $('go').onclick = async () => {
       setStat(m.phase + ' · ' + m.progress + '%');
     } else if (m.type === 'done') {
       result = m.payload;
+      // 旧版 worker 不认识 style 字段：它只会跑油画，返回的 payload 里没有 styleLabel。
+      // 这种情况必须明确报错，否则用户会以为「选了风格却没生效」。
+      if (!result.styleLabel || !result.style) {
+        setStat('脚本版本过旧：浏览器用了缓存里的旧 worker.js。请强制刷新（Ctrl+F5 / ⌘+Shift+R）后重试。', true);
+        $('go').disabled = false; setProg(0);
+        return;
+      }
+      if (result.style !== curStyle) {
+        setStat('风格未生效（期望 ' + curStyle + '，实际 ' + result.style + '）。请强制刷新页面后重试。', true);
+        $('go').disabled = false; setProg(0);
+        return;
+      }
       window.result = result;
       window.curStyle = curStyle;
       setStat('完成 · ' + result.styleLabel + ' · 用时 ' + result.elapsed.toFixed(1) + 's');
@@ -628,9 +676,10 @@ async function buildPlayerBlob(r, file) {
     stages: r.stages.map(s => ({ name: s.name, label: s.label, t: s.t, n: s.n })),
     strokes: r.strokes,
   };
+  const V = '?v=' + encodeURIComponent(window.OIL_BUILD || Date.now());
   const [tpl, renderSrc] = await Promise.all([
-    fetch('player-template.html').then(x => x.text()),
-    fetch('render.js').then(x => x.text()),
+    fetch('player-template.html' + V).then(x => x.text()),
+    fetch('render.js' + V).then(x => x.text()),
   ]);
   const html = tpl
     .replace('__RENDERJS__', () => renderSrc)
