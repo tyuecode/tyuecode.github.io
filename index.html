@@ -4,126 +4,187 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#0f0d0b">
-<title>strokeoil · 图片逐笔重绘</title>
+<title>Brushtrokes · 笔触工坊 — 图片逐笔重绘</title>
 <meta name="description" content="在浏览器里把图片按不同绘画风格逐笔重绘成动画：油画、线描、色块、素描。全部本地处理，不上传。">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23d9a441'/%3E%3Cpath d='M7 22c4-9 8-12 11-12s5 3 7 12' stroke='%2317130c' stroke-width='3' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
 <style>
   *{box-sizing:border-box}
   :root{
-    --bg:#0f0d0b; --panel:#17140f; --line:#2a241c; --line2:#3a3226;
-    --gold:#d9a441; --gold2:#e8c26a; --txt:#ece6dc; --dim:#9b8d78; --dim2:#6f6455;
-    --ok:#8ee6a8; --err:#ff8080;
+    --bg:#0b0a09; --panel:#151210; --panel2:#1b1714; --line:#2b2520; --line2:#3b332b;
+    --gold:#d9a441; --gold2:#ecc97a; --gold3:#b8872c;
+    --txt:#f0ebe2; --dim:#a2957f; --dim2:#736658;
+    --ok:#8ee6a8; --err:#ff8f8f;
+    --radius:16px;
+    --shadow:0 1px 0 rgba(255,255,255,.03) inset, 0 14px 40px -18px rgba(0,0,0,.9);
   }
   html,body{margin:0;min-height:100%;background:
-    radial-gradient(1200px 700px at 10% -10%,#1e1913 0%,#0f0d0b 55%,#080706 100%);
+    radial-gradient(1100px 620px at 12% -8%,#1d1813 0%,#0d0c0a 52%,#070606 100%);
     color:var(--txt);font-family:"Microsoft YaHei","PingFang SC","Segoe UI",sans-serif;
-    -webkit-font-smoothing:antialiased;overflow-x:hidden}
-  .wrap{max-width:1240px;margin:0 auto;padding:30px 24px 80px}
-  header{display:flex;align-items:baseline;gap:14px;margin-bottom:4px;flex-wrap:wrap}
-  h1{font-size:26px;margin:0;letter-spacing:.5px}
-  .sub{color:var(--dim);font-size:13px}
-  .flow{margin:6px 0 22px;color:var(--dim2);font-size:12.5px;letter-spacing:.3px;line-height:1.7}
-  .grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start}
-  @media(max-width:940px){.grid{grid-template-columns:1fr}}
-  .card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px}
-  .card h2{font-size:13px;margin:0 0 14px;color:var(--dim);font-weight:600;letter-spacing:.6px}
-  #drop{border:2px dashed var(--line2);border-radius:14px;padding:36px 20px;text-align:center;
-        cursor:pointer;transition:all .2s;background:rgba(255,255,255,.012)}
-  #drop:hover{border-color:var(--gold);background:rgba(217,164,65,.045)}
-  #drop.on{border-color:var(--gold);background:rgba(217,164,65,.09);transform:scale(1.005)}
-  #drop .ico{font-size:34px;opacity:.55;margin-bottom:8px}
-  #drop .t1{font-size:14.5px;margin-bottom:4px}
-  #drop .t2{font-size:12px;color:var(--dim2)}
-  .pickBtn{display:none;margin:12px auto 0;min-height:40px;padding:8px 20px}
-  #thumbWrap{display:none;margin-top:14px}
-  #thumb{width:100%;border-radius:10px;display:block;outline:1px solid var(--line2)}
-  .fname{font-size:12px;color:var(--dim);margin-top:7px;display:flex;justify-content:space-between}
-  .row{display:flex;align-items:center;gap:12px;margin:15px 0}
-  .row label{font-size:12.5px;color:var(--dim);width:96px;flex:none}
-  .row input[type=range]{flex:1;accent-color:var(--gold);height:4px}
-  .row .val{width:86px;text-align:right;font-size:12.5px;color:var(--txt);
-            font-variant-numeric:tabular-nums}
-  .row select,.row input[type=number],.row input[type=text]{
-    background:#0c0a08;color:var(--txt);border:1px solid var(--line2);
-    border-radius:8px;padding:6px 9px;font-size:12.5px;font-family:inherit}
-  button{font-family:inherit;cursor:pointer;border-radius:11px;font-size:14px;
-         border:1px solid var(--line2);background:#221c15;color:var(--txt);padding:11px 18px;
-         transition:all .18s}
-  button:hover:not(:disabled){background:#2b2319;border-color:var(--gold)}
-  button.primary{background:linear-gradient(180deg,#e0b25c,#c08e2e);border-color:#e0b25c;
-                 color:#17130c;font-weight:700;width:100%;margin-top:8px;font-size:15px;padding:13px}
-  button.primary:hover:not(:disabled){filter:brightness(1.07)}
-  button:disabled{opacity:.45;cursor:not-allowed}
+    -webkit-font-smoothing:antialiased;overflow-x:hidden;
+    font-feature-settings:"tnum" 0}
+  /* 顶部一道极细的高光，让整页有「装裱」的感觉 */
+  body::before{content:"";position:fixed;top:0;left:0;right:0;height:1px;z-index:9;
+    background:linear-gradient(90deg,transparent,rgba(217,164,65,.42),transparent);pointer-events:none}
+  .wrap{max-width:1260px;margin:0 auto;padding:38px 26px 96px}
 
-  /* ---------- 风格选择 ---------- */
-  .styles{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:6px;align-items:start}
-  .stile{position:relative;border:1px solid var(--line2);border-radius:12px;padding:11px 12px;
-         cursor:pointer;background:rgba(255,255,255,.012);transition:all .18s;overflow:hidden}
-  .stile:hover{border-color:var(--gold);background:rgba(217,164,65,.05)}
-  .stile.on{border-color:var(--gold);background:rgba(217,164,65,.10);
-            box-shadow:0 0 0 1px rgba(217,164,65,.35) inset}
-  .stile .nm{font-size:13.5px;font-weight:700;display:flex;align-items:center;gap:7px}
-  .stile .nm .dot{width:8px;height:8px;border-radius:50%;background:var(--dim2);flex:none}
-  .stile.on .nm .dot{background:var(--gold);box-shadow:0 0 9px var(--gold)}
-  .stile .ds{font-size:11px;color:var(--dim2);margin-top:4px;line-height:1.5}
-  .stile .chips{display:flex;flex-wrap:wrap;gap:3px;margin-top:7px}
-  .stile .chips i{font-style:normal;font-size:9.5px;padding:1px 5px;border-radius:4px;
-    color:var(--dim2);background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06);
+  /* ---------- 页头 ---------- */
+  header{display:flex;align-items:baseline;gap:13px;margin-bottom:6px;flex-wrap:wrap}
+  h1{font-size:27px;margin:0;letter-spacing:-.2px;font-weight:800;color:var(--txt)}
+  h1 .h1cn{font-size:15px;font-weight:600;letter-spacing:.8px;color:var(--gold2);
+    vertical-align:2px;margin-left:2px}
+  .sub{color:var(--dim2);font-size:12.5px;letter-spacing:.3px}
+  .flow{margin:14px 0 24px;color:var(--dim);font-size:12.5px;letter-spacing:.3px;line-height:1.7;
+    padding:10px 14px;border-radius:11px;background:rgba(255,255,255,.022);
+    border:1px solid var(--line);display:flex;align-items:center;gap:9px}
+  .flow::before{content:"";width:6px;height:6px;border-radius:50%;flex:none;
+    background:var(--gold);box-shadow:0 0 10px var(--gold)}
+
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:22px;align-items:start}
+  @media(max-width:980px){.grid{grid-template-columns:1fr}}
+
+  /* ---------- 卡片 ---------- */
+  .card{background:linear-gradient(180deg,var(--panel2),var(--panel));
+        border:1px solid var(--line);border-radius:var(--radius);padding:20px;
+        box-shadow:var(--shadow)}
+  .card h2{font-size:12px;margin:0 0 15px;color:var(--dim);font-weight:700;letter-spacing:1.4px;
+    text-transform:uppercase;display:flex;align-items:center;gap:9px}
+  .card h2::after{content:"";flex:1;height:1px;
+    background:linear-gradient(90deg,var(--line),transparent)}
+
+  /* ---------- 拖拽区 ---------- */
+  #drop{border:1.5px dashed var(--line2);border-radius:13px;padding:38px 20px;text-align:center;
+        cursor:pointer;transition:all .22s ease;background:rgba(255,255,255,.012)}
+  #drop:hover{border-color:var(--gold);background:rgba(217,164,65,.05);transform:translateY(-1px)}
+  #drop.on{border-color:var(--gold);background:rgba(217,164,65,.10);transform:scale(1.006)}
+  #drop .ico{font-size:32px;opacity:.5;margin-bottom:10px;transition:transform .22s}
+  #drop:hover .ico{transform:translateY(-2px);opacity:.8}
+  #drop .t1{font-size:14.5px;margin-bottom:5px;font-weight:600}
+  #drop .t2{font-size:12px;color:var(--dim2);line-height:1.6}
+  .pickBtn{display:none;margin:14px auto 0;min-height:40px;padding:8px 20px}
+  #thumbWrap{display:none;margin-top:16px}
+  #thumb{width:100%;border-radius:10px;display:block;
+    box-shadow:0 0 0 1px var(--line2),0 10px 26px -14px rgba(0,0,0,.9)}
+  .fname{font-size:12px;color:var(--dim);margin-top:9px;display:flex;justify-content:space-between;
+    gap:12px;font-variant-numeric:tabular-nums}
+
+  /* ---------- 参数行 ---------- */
+  .row{display:flex;align-items:center;gap:12px;margin:16px 0}
+  .row label{font-size:12.5px;color:var(--dim);width:92px;flex:none;letter-spacing:.2px}
+  .row input[type=range]{flex:1;accent-color:var(--gold);height:4px;cursor:pointer}
+  .row .val{width:88px;text-align:right;font-size:12.5px;color:var(--txt);
+    font-variant-numeric:tabular-nums;font-weight:600}
+  .row select,.row input[type=number],.row input[type=text]{
+    background:#0a0908;color:var(--txt);border:1px solid var(--line2);
+    border-radius:9px;padding:7px 10px;font-size:12.5px;font-family:inherit;
+    transition:border-color .18s}
+  .row select:focus,.row input:focus{outline:none;border-color:var(--gold)}
+
+  /* ---------- 按钮 ---------- */
+  button{font-family:inherit;cursor:pointer;border-radius:11px;font-size:14px;
+    border:1px solid var(--line2);background:linear-gradient(180deg,#261f18,#1c1712);
+    color:var(--txt);padding:11px 18px;transition:all .18s ease;font-weight:600}
+  button:hover:not(:disabled){background:linear-gradient(180deg,#302720,#221c16);
+    border-color:var(--gold);transform:translateY(-1px)}
+  button:active:not(:disabled){transform:translateY(0)}
+  button.primary{background:linear-gradient(180deg,#f0cd83,#c9932f);border-color:#ecc97a;
+    color:#1a1408;font-weight:800;width:100%;margin-top:10px;font-size:15px;padding:14px;
+    letter-spacing:.4px;box-shadow:0 8px 24px -12px rgba(217,164,65,.75)}
+  button.primary:hover:not(:disabled){filter:brightness(1.06);
+    box-shadow:0 10px 28px -11px rgba(217,164,65,.85)}
+  button:disabled{opacity:.42;cursor:not-allowed;transform:none}
+
+  /* ---------- 进度 ---------- */
+  .bar{height:5px;border-radius:99px;background:#241e18;overflow:hidden;margin-top:16px}
+  .bar i{display:block;height:100%;width:0%;border-radius:99px;
+    background:linear-gradient(90deg,#a8761f,var(--gold2));transition:width .35s ease;
+    box-shadow:0 0 12px rgba(217,164,65,.45)}
+  .stat{font-size:12.5px;color:var(--dim);margin-top:11px;min-height:18px;line-height:1.5}
+  .stat.err{color:var(--err)}
+
+  /* ---------- 风格卡片 ---------- */
+  .styles{display:grid;grid-template-columns:repeat(2,1fr);gap:11px;margin-bottom:4px;align-items:start}
+  .stile{position:relative;border:1px solid var(--line2);border-radius:13px;padding:12px 13px;
+    cursor:pointer;background:linear-gradient(180deg,rgba(255,255,255,.028),rgba(255,255,255,.008));
+    transition:all .2s ease;overflow:hidden}
+  .stile:hover{border-color:rgba(217,164,65,.55);transform:translateY(-1px);
+    box-shadow:0 8px 22px -14px rgba(0,0,0,.95)}
+  .stile.on{border-color:var(--gold);
+    background:linear-gradient(180deg,rgba(217,164,65,.14),rgba(217,164,65,.05));
+    box-shadow:0 0 0 1px rgba(217,164,65,.30) inset, 0 10px 26px -16px rgba(217,164,65,.7)}
+  .stile .nm{font-size:13.5px;font-weight:800;display:flex;align-items:center;gap:8px;
+    letter-spacing:.2px}
+  .stile .nm .dot{width:7px;height:7px;border-radius:50%;background:var(--dim2);flex:none;
+    transition:all .2s}
+  .stile.on .nm .dot{background:var(--gold);box-shadow:0 0 10px var(--gold)}
+  .stile .ds{font-size:11px;color:var(--dim2);margin-top:5px;line-height:1.55}
+  .stile.on .ds{color:var(--dim)}
+  .stile .chips{display:flex;flex-wrap:wrap;gap:3px;margin-top:8px}
+  .stile .chips i{font-style:normal;font-size:9.5px;padding:1.5px 6px;border-radius:5px;
+    color:var(--dim2);background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.055);
     white-space:nowrap}
-  .stile.on .chips i{color:var(--gold);background:rgba(217,164,65,.10);border-color:rgba(217,164,65,.2)}
+  .stile.on .chips i{color:var(--gold2);background:rgba(217,164,65,.11);
+    border-color:rgba(217,164,65,.22)}
   @media(max-width:520px){.styles{grid-template-columns:1fr}}
 
-  .bar{height:6px;border-radius:3px;background:#241e16;overflow:hidden;margin-top:14px}
-  .bar i{display:block;height:100%;width:0%;
-         background:linear-gradient(90deg,#a8761f,#e8c26a);transition:width .3s}
-  .stat{font-size:12.5px;color:var(--dim);margin-top:9px;min-height:18px}
-  .stat.err{color:var(--err)}
   #result{display:none}
-  #result .big{font-size:34px;color:var(--gold);font-weight:700;
-               font-variant-numeric:tabular-nums;line-height:1.15}
-  .kv{display:grid;grid-template-columns:repeat(2,1fr);gap:8px 14px;margin:14px 0;font-size:12.5px}
-  .kv span{color:var(--dim)}.kv b{color:var(--txt);font-variant-numeric:tabular-nums}
+  #result .big{font-size:38px;font-weight:800;letter-spacing:-.5px;
+    background:linear-gradient(180deg,#fdf1d6,var(--gold) 88%);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+    font-variant-numeric:tabular-nums;line-height:1.12}
+  .kv{display:grid;grid-template-columns:repeat(2,1fr);gap:9px 16px;margin:16px 0;
+    font-size:12.5px;padding:14px;border-radius:12px;
+    background:rgba(255,255,255,.018);border:1px solid var(--line)}
+  .kv span{color:var(--dim2)}.kv b{color:var(--txt);font-variant-numeric:tabular-nums;
+    font-weight:700}
   .tips{font-size:12px;color:var(--dim2);line-height:1.8;margin-top:12px}
-  a{color:var(--gold2)}
-  .adv{margin-top:6px;border-top:1px solid var(--line);padding-top:12px}
-  .adv summary{cursor:pointer;font-size:12.5px;color:var(--dim);outline:none}
-  .files{display:flex;gap:9px;flex-wrap:wrap;margin-top:12px}
-  .files a,.files button{flex:1;min-width:120px;text-align:center;padding:10px;border-radius:9px;
-    background:#221c15;border:1px solid var(--line2);text-decoration:none;color:var(--txt);
-    font-size:12.5px}
-  .files a:hover,.files button:hover{border-color:var(--gold)}
-  .stgChip{display:inline-block;padding:2px 7px;border-radius:6px;font-size:10.5px;
+  a{color:var(--gold2);text-decoration:none}
+  a:hover{text-decoration:underline}
+  .adv{margin-top:10px;border-top:1px solid var(--line);padding-top:14px}
+  .adv summary{cursor:pointer;font-size:12.5px;color:var(--dim);outline:none;
+    letter-spacing:.3px;transition:color .18s}
+  .adv summary:hover{color:var(--gold2)}
+  .files{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+  .files a,.files button{flex:1;min-width:124px;text-align:center;padding:11px;border-radius:10px;
+    background:linear-gradient(180deg,#241e17,#1b1611);border:1px solid var(--line2);
+    text-decoration:none;color:var(--txt);font-size:12.5px;font-weight:600;
+    transition:all .18s}
+  .files a:hover,.files button:hover{border-color:var(--gold);transform:translateY(-1px);
+    background:linear-gradient(180deg,#2e261d,#231d16)}
+  .stgChip{display:inline-block;padding:2.5px 8px;border-radius:6px;font-size:10.5px;
     color:var(--dim2);background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);
-    margin:2px 3px 2px 0;font-variant-numeric:tabular-nums}
-  .stgChip.on{color:#17130c;background:var(--gold2);border-color:var(--gold2)}
-  .stgChip.done{color:var(--dim);background:rgba(217,164,65,.10);border-color:rgba(217,164,65,.25)}
-  #liveWrap{display:none;margin-top:14px}
-  #live{width:100%;border-radius:10px;display:block;background:#181613;
-        outline:1px solid var(--line2);box-shadow:0 12px 34px rgba(0,0,0,.5)}
-  .liveBar{display:flex;align-items:center;gap:10px;margin-top:9px;font-size:11.5px;color:var(--dim);
-           font-variant-numeric:tabular-nums}
-  .liveTrack{flex:1;height:5px;border-radius:3px;background:rgba(255,255,255,.07);
-             overflow:hidden;cursor:pointer;position:relative}
-  .liveTrack i{display:block;height:100%;width:0%;background:linear-gradient(90deg,#a8761f,#e8c26a)}
-  .badge{font-size:10.5px;padding:2px 8px;border-radius:6px;background:rgba(217,164,65,.14);
-         color:var(--gold);border:1px solid rgba(217,164,65,.3)}
-  footer{margin-top:34px;font-size:11.5px;color:var(--dim2);line-height:1.9;text-align:center}
+    margin:2px 3px 2px 0;font-variant-numeric:tabular-nums;transition:all .2s}
+  .stgChip.on{color:#1a1408;background:var(--gold2);border-color:var(--gold2);font-weight:700}
+  .stgChip.done{color:var(--dim);background:rgba(217,164,65,.10);border-color:rgba(217,164,65,.24)}
+  #liveWrap{display:none;margin-top:16px}
+  #live{width:100%;border-radius:11px;display:block;background:#181613;
+    box-shadow:0 0 0 1px var(--line2),0 18px 44px -18px rgba(0,0,0,.95)}
+  .liveBar{display:flex;align-items:center;gap:10px;margin-top:10px;font-size:11.5px;
+    color:var(--dim);font-variant-numeric:tabular-nums}
+  .liveTrack{flex:1;height:5px;border-radius:99px;background:rgba(255,255,255,.07);
+    overflow:hidden;cursor:pointer;position:relative}
+  .liveTrack i{display:block;height:100%;border-radius:99px;width:0%;
+    background:linear-gradient(90deg,#a8761f,var(--gold2))}
+  .badge{font-size:10.5px;padding:2.5px 9px;border-radius:7px;background:rgba(217,164,65,.14);
+    color:var(--gold);border:1px solid rgba(217,164,65,.3);font-weight:600}
+  footer{margin-top:44px;font-size:11.5px;color:var(--dim2);line-height:2;text-align:center;
+    padding-top:22px;border-top:1px solid var(--line)}
   footer a{color:var(--dim)}
 
   @media(max-width:720px){
-    .wrap{padding:16px 14px 60px}
-    h1{font-size:21px}
+    .wrap{padding:18px 14px 64px}
+    h1{font-size:22px}
+    h1 .h1cn{font-size:13px;vertical-align:1px}
     .sub{font-size:12px}
-    .flow{font-size:11.5px;margin:4px 0 18px;line-height:1.9}
-    .grid{grid-template-columns:1fr;gap:14px}
-    .card{padding:14px;border-radius:14px}
-    .card h2{font-size:12.5px;margin-bottom:11px}
-    #drop{padding:28px 16px;border-radius:12px}
+    .flow{font-size:11.5px;margin:12px 0 18px;line-height:1.8;padding:9px 12px}
+    .grid{grid-template-columns:1fr;gap:15px}
+    .card{padding:15px;border-radius:14px}
+    .card h2{font-size:11px;margin-bottom:12px;letter-spacing:1.2px}
+    #drop{padding:30px 16px;border-radius:12px}
     #drop .ico{font-size:30px}
     #drop .t1{font-size:13.5px}
     #drop .t2{font-size:11px;line-height:1.6}
     .pickBtn{display:block}
-    .row{flex-wrap:wrap;gap:8px;margin:13px 0}
+    .row{flex-wrap:wrap;gap:8px;margin:14px 0}
     .row label{width:100%;font-size:12px}
     .row .val{width:auto;margin-left:auto}
     .row input[type=range]{flex:1;height:32px}
@@ -132,9 +193,9 @@
       min-height:44px;border-radius:10px}
     .row input[type=number]{width:100%}
     button{min-height:46px;padding:12px 18px;font-size:14.5px;border-radius:12px}
-    button.primary{padding:14px;font-size:15.5px}
-    #result .big{font-size:30px}
-    .kv{grid-template-columns:1fr 1fr;gap:7px 10px;font-size:12px}
+    button.primary{padding:15px;font-size:15.5px}
+    #result .big{font-size:32px}
+    .kv{grid-template-columns:1fr 1fr;gap:8px 10px;font-size:12px;padding:12px}
     .files{flex-direction:column}
     .files a,.files button{min-width:0;padding:13px;font-size:13.5px;min-height:46px}
     .tips{font-size:11.5px}
@@ -153,8 +214,8 @@
 <body>
 <div class="wrap">
   <header>
-    <h1>strokeoil</h1>
-    <div class="sub">图片逐笔重绘 · 八种风格 · 纯浏览器运行</div>
+    <h1>Brushtrokes <span class="h1cn">笔触工坊</span></h1>
+    <div class="sub">八种画风 · 逐笔重绘 · 纯浏览器运行</div>
   </header>
   <div class="flow" id="flowLine">选一种风格，图片会被逐笔重绘成可播放的动画</div>
 
@@ -257,10 +318,22 @@
         </div>
 
         <div class="kv" id="rKv"></div>
+        <div class="row" style="margin:12px 0 4px">
+          <label>导出分辨率</label>
+          <select id="dlRes">
+            <option value="1" selected>原图尺寸</option>
+            <option value="2">2 倍（高清）</option>
+            <option value="3">3 倍（超清）</option>
+          </select>
+          <div class="val" id="dlResV"></div>
+        </div>
         <div class="files">
           <button id="dlPlayer">⬇ 下载播放器 HTML</button>
           <button id="dlPreview">⬇ 下载终帧 PNG</button>
           <button id="replay">↻ 重播</button>
+        </div>
+        <div class="tips">
+          终帧按所选倍数重新绘制，不受屏幕尺寸限制。倍数越高文件越大、导出越慢。
         </div>
         <div class="tips">
           下载的播放器是单个 HTML 文件，图片和笔触全部内联，
@@ -291,7 +364,7 @@
   </div>
 
   <footer>
-    strokeoil · 油画 / 线描 / 色块 / 素描 / 水墨 / 点彩 / 霓虹 / 像素<br>
+    Brushtrokes 笔触工坊 · 油画 / 线描 / 色块 / 素描 / 水墨 / 点彩 / 霓虹 / 像素<br>
     纯前端实现，无需服务器 · <a href="https://github.com/tyuecode/tyuecode.github.io" id="repoLink" target="_blank">源码</a>
   </footer>
 </div>
@@ -648,15 +721,68 @@ $('replay').onclick = () => {
 };
 
 /* ---------------- 下载 ---------------- */
+/* 导出终帧：不用屏幕预览画布（它最宽只有 1000px，还受设备像素比影响），
+ * 而是按原图分辨率离屏重绘一遍，保证下载到的是全尺寸图。 */
 $('dlPreview').onclick = () => {
-  liveCv.toBlob(b => {
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(b);
-    a.download = 'strokeoil-' + (result ? result.style : 'preview') + '.png';
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-  }, 'image/png');
+  if (!result) return;
+  const btn = $('dlPreview');
+  const old = btn.textContent;
+  const mult = +(  document.getElementById('dlRes').value || 1);
+  btn.disabled = true;
+  btn.textContent = '导出中…';
+  // 让按钮状态先渲染出来，再做重计算
+  setTimeout(() => {
+    try {
+      const outW = Math.round(result.w * mult), outH = Math.round(result.h * mult);
+      const blob = renderFullFrame(result, mult);
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'brushtrokes-' + result.style + '-' + outW + 'x' + outH + '.png';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+      setStat('已导出终帧 · ' + outW + '×' + outH + ' · ' + (blob.size / 1048576).toFixed(1) + ' MB');
+    } catch (e) {
+      alert('导出失败：' + e.message);
+      console.error(e);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = old;
+    }
+  }, 30);
 };
+
+/* 按原图尺寸（或指定倍数）把全部笔触重绘到离屏画布，返回 PNG Blob */
+function renderFullFrame(r, mult) {
+  const k = mult || 1;
+  const W = Math.round(r.w * k), H = Math.round(r.h * k);
+  // 防御：过大尺寸容易 OOM，给个上限（约 8000×8000）
+  const MAX = 8000;
+  const shrink = Math.min(1, MAX / Math.max(W, H));
+  const cw = Math.round(W * shrink), ch = Math.round(H * shrink);
+
+  const cv = document.createElement('canvas');
+  cv.width = cw; cv.height = ch;
+  const c = cv.getContext('2d', { alpha: false });
+  OILRender.paintGround(c, cw, ch, r.ground);
+  const sc = cw / r.w;
+  const pre = OILRender.preprocess(r.strokes);
+  for (let i = 0; i < r.strokes.length; i++) {
+    OILRender.drawStroke(c, r.strokes, sc, i, 1, pre[i]);
+  }
+  // toBlob 是同步编码，用 dataURL 兜底以便在无回调场景也能拿到
+  const durl = cv.toDataURL('image/png');
+  return dataURLtoBlob(durl);
+}
+
+function dataURLtoBlob(durl) {
+  const parts = durl.split(',');
+  const mime = parts[0].match(/:(.*?);/)[1];
+  const bin = atob(parts[1]);
+  const len = bin.length;
+  const buf = new Uint8Array(len);
+  for (let i = 0; i < len; i++) buf[i] = bin.charCodeAt(i);
+  return new Blob([buf], { type: mime });
+}
 
 $('dlPlayer').onclick = async () => {
   if (!result) return;
@@ -666,7 +792,7 @@ $('dlPlayer').onclick = async () => {
     const blob = await buildPlayerBlob(result, curFile);
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = 'strokeoil-' + result.style + '-player.html';
+    a.download = 'brushtrokes-' + result.style + '-player.html';
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 8000);
   } catch (e) {
