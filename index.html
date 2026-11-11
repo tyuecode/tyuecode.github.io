@@ -185,6 +185,9 @@
           <input type="range" id="scale" min="0.55" max="1.8" step="0.05" value="1">
           <div class="val" id="scaleV">1.00</div>
         </div>
+        <div class="tips" style="margin-top:-8px;margin-bottom:8px" id="scaleHint">
+          数值越小笔触越细越密，细节越清楚，文件也越大。
+        </div>
         <div class="row">
           <label>动画时长</label>
           <input type="range" id="secs" min="20" max="240" step="5" value="90">
@@ -354,8 +357,13 @@ function selectStyle(key) {
   };
   $('flowLine').textContent = s.label + ' · ' + STEPS[key].join(' → ');
   $('layerHint').textContent = key === 'posterize'
-    ? '色块风格用它决定配色档数。'
+    ? '色块风格用它决定配色档数（5 档最稳，8 档层次最多）。'
     : (key === 'pencil' ? '素描风格用 5 档即可，影响不大。' : '色彩分层的层数。');
+  $('scaleHint').textContent = key === 'posterize'
+    ? '往左＝保留更多小色块、边缘更贴原图；往右＝把小色块并掉，画面更概括。'
+    : (key === 'lineart' ? '往左＝线条更密更细；往右＝只留主线。'
+    : (key === 'pencil' ? '往左＝排线更密；往右＝笔触更粗犷。'
+    : '数值越小笔触越细越密，细节越清楚，文件也越大。'));
   if (result) { $('result').style.display = 'none'; }
 }
 

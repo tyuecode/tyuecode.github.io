@@ -263,8 +263,9 @@
    * 输出每个连通区域的闭合轮廓（图像坐标），供「色块」风格平涂。
    * 轮廓方向不规范化，渲染端统一用 evenodd 填充，孔洞自然正确。
    */
-  function layerContours(A, layer, minArea) {
-    const { labels, AW, AH, sxa, sya } = A;
+  function layerContours(A, layer, minArea, labelSrc) {
+    const labels = labelSrc || A.labels;
+    const { AW, AH, sxa, sya } = A;
     const at = (x, y) => (x < 0 || y < 0 || x >= AW || y >= AH) ? 0 : (labels[y * AW + x] === layer ? 1 : 0);
     const AX = [], AY = [], BX = [], BY = [];
     const seg = (ax, ay, bx, by) => { AX.push(ax); AY.push(ay); BX.push(bx); BY.push(by); };
@@ -352,6 +353,56 @@
       s += Math.hypot(pts[j * 2] - pts[i * 2], pts[j * 2 + 1] - pts[i * 2 + 1]);
     }
     return s;
+  }
+
+  /* 闭合轮廓的曲线平滑：对每个点用左右邻居做加权平均（Chaikin 式松弛），
+   * 把 marching squares 的台阶磨圆。迭代次数越多越圆滑。 */
+  function smoothLoop(pts, iters) {
+    let cur = Array.from(pts);
+    for (let it = 0; it < iters; it++) {
+      const n = cur.length / 2;
+      if (n < 4) break;
+      const out = new Array(n * 2);
+      for (let i = 0; i < n; i++) {
+        const ip = (i - 1 + n) % n, inx = (i + 1) % n;
+        // 0.25 / 0.5 / 0.25 加权，既平滑又不会明显收缩
+        out[i * 2] = cur[ip * 2] * 0.25 + cur[i * 2] * 0.5 + cur[inx * 2] * 0.25;
+        out[i * 2 + 1] = cur[ip * 2 + 1] * 0.25 + cur[i * 2 + 1] * 0.5 + cur[inx * 2 + 1] * 0.25;
+      }
+      cur = out;
+    }
+    return cur;
+  }
+
+  /* 沿法线把闭合轮廓向外推开 d 个像素。
+   * 相邻色块各自描边后，两次抗锯齿会在交界处留下一道底色细缝，
+   * 每块向外膨胀一点点就能互相压住，缝就没了。 */
+  function inflateLoop(pts, d) {
+    const n = pts.length / 2;
+    if (n < 3 || d <= 0) return Array.from(pts);
+    // 先判方向，保证「向外」一致
+    let area2 = 0;
+    for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n;
+      area2 += pts[i * 2] * pts[j * 2 + 1] - pts[j * 2] * pts[i * 2 + 1];
+    }
+    const sign = area2 >= 0 ? 1 : -1;
+    const out = new Array(n * 2);
+    for (let i = 0; i < n; i++) {
+      const ip = (i - 1 + n) % n, inx = (i + 1) % n;
+      // 前后两条边的方向
+      let ax = pts[i * 2] - pts[ip * 2], ay = pts[i * 2 + 1] - pts[ip * 2 + 1];
+      let bx = pts[inx * 2] - pts[i * 2], by = pts[inx * 2 + 1] - pts[i * 2 + 1];
+      const la = Math.hypot(ax, ay) || 1e-9, lb = Math.hypot(bx, by) || 1e-9;
+      ax /= la; ay /= la; bx /= lb; by /= lb;
+      // 两条边的法线取平均
+      let nx = (-ay + -by) * 0.5, ny = (ax + bx) * 0.5;
+      const ln = Math.hypot(nx, ny) || 1e-9;
+      nx = (nx / ln) * d * sign; ny = (ny / ln) * d * sign;
+      out[i * 2] = pts[i * 2] + nx;
+      out[i * 2 + 1] = pts[i * 2 + 1] + ny;
+    }
+    return out;
   }
 
   /* Ramer–Douglas–Peucker（开链） */
@@ -1067,6 +1118,10 @@
 
   /* ================================================================ 风格三：色块
    * 参照 astronaut_layers.png：k-means 分层 → 每层一个平涂色 → 硬边填色。
+   *
+   * 「细腻程度」在这里的语义和其他风格保持一致——越小越细：
+   * 控制色块的最小面积阈值与轮廓简化程度，小色块会被并进邻居，
+   * 于是滑块能真实改变画面精细度（原来这个风格根本没读 scale）。
    */
   const POSTER_STAGE = [
     ['base', '铺底色', 14.0],
@@ -1075,6 +1130,90 @@
     ['light', '亮部', 24.0],
     ['accent', '点缀', 12.0],
   ];
+
+  /* 把散点噪声清掉：一个像素如果它的同层邻居少于阈值，就并到周围最多的那层。
+   * k-means 的原始标签图边缘是锯齿状的，直接描边会得到毛刺，这一步同时也能
+   * 把孤立的小色斑吃掉，让色块更像「一笔涂上去」而不是像素噪点。 */
+  function smoothLabels(labels, AW, AH, k, passes) {
+    let cur = labels;
+    for (let p = 0; p < passes; p++) {
+      const next = new Uint8Array(AW * AH);
+      const cnt = new Int32Array(k);
+      for (let y = 0; y < AH; y++) {
+        for (let x = 0; x < AW; x++) {
+          const i = y * AW + x;
+          cnt.fill(0);
+          let best = cur[i], bestN = 0;
+          for (let dy = -1; dy <= 1; dy++) {
+            const yy = y + dy;
+            if (yy < 0 || yy >= AH) continue;
+            for (let dx = -1; dx <= 1; dx++) {
+              const xx = x + dx;
+              if (xx < 0 || xx >= AW) continue;
+              const l = cur[yy * AW + xx];
+              cnt[l]++;
+              if (cnt[l] > bestN) { bestN = cnt[l]; best = l; }
+            }
+          }
+          next[i] = bestN >= 5 ? best : cur[i];
+        }
+      }
+      cur = next;
+    }
+    return cur;
+  }
+
+  /* 合并小连通域：面积小于阈值的色块并入它接触最多的邻层。
+   * 这是「细腻程度」真正起作用的地方——阈值越小，保留的小色块越多。 */
+  function mergeSmallRegions(labels, AW, AH, k, minArea) {
+    const out = new Uint8Array(labels);
+    const seen = new Uint8Array(AW * AH);
+    const stack = new Int32Array(AW * AH);
+    const nb = new Int32Array(k);
+    const region = new Int32Array(AW * AH);
+
+    for (let sy = 0; sy < AH; sy++) {
+      for (let sx = 0; sx < AW; sx++) {
+        const start = sy * AW + sx;
+        if (seen[start]) continue;
+        const lv = labels[start];
+        // 洪水填充出这一块
+        let sp = 0, n = 0;
+        stack[sp++] = start; seen[start] = 1;
+        while (sp > 0) {
+          const i = stack[--sp];
+          region[n++] = i;
+          const x = i % AW, y = (i / AW) | 0;
+          for (let d = 0; d < 4; d++) {
+            const nx = x + (d === 0 ? 1 : d === 1 ? -1 : 0);
+            const ny = y + (d === 2 ? 1 : d === 3 ? -1 : 0);
+            if (nx < 0 || ny < 0 || nx >= AW || ny >= AH) continue;
+            const j = ny * AW + nx;
+            if (seen[j] || labels[j] !== lv) continue;
+            seen[j] = 1; stack[sp++] = j;
+          }
+        }
+        if (n >= minArea) continue;
+        // 太小的块 → 统计它四周接触最多的其他层
+        nb.fill(0);
+        for (let q = 0; q < n; q++) {
+          const i = region[q];
+          const x = i % AW, y = (i / AW) | 0;
+          for (let d = 0; d < 4; d++) {
+            const nx = x + (d === 0 ? 1 : d === 1 ? -1 : 0);
+            const ny = y + (d === 2 ? 1 : d === 3 ? -1 : 0);
+            if (nx < 0 || ny < 0 || nx >= AW || ny >= AH) continue;
+            const nl = labels[ny * AW + nx];
+            if (nl !== lv) nb[nl]++;
+          }
+        }
+        let bi = -1, bn = 0;
+        for (let l = 0; l < k; l++) if (nb[l] > bn) { bn = nb[l]; bi = l; }
+        if (bi >= 0) for (let q = 0; q < n; q++) out[region[q]] = bi;
+      }
+    }
+    return out;
+  }
 
   function buildPosterize(A, rgba, W, H, opts, onStage) {
     const P = makePainter(A, rgba, W, H, opts.seed || 20261109);
@@ -1088,54 +1227,71 @@
     };
 
     const k = clamp(opts.layers || 5, 2, 8);
-    // 每层均值色在原图分辨率上取，避免降采样偏色
+    /* 细腻程度：1.0 为基准。滑动条越小 = 越细腻（保留更多小色块、轮廓更贴合），
+     * 越大 = 越概括（小色块被并掉，色块更整块）。 */
+    const fine = clamp(opts.scale || 1, 0.55, 1.8);
+    // fine 小 → 阈值小 → 保留更多细节，所以两者同向
+    const detailK = fine;
+
+    // ---- 标签图：平滑 + 合并小区域 ----
+    // 越细腻越少平滑（保住边缘细节），越概括越多平滑
+    const smoothPasses = clamp(Math.round(3 - 1.2 * detailK), 1, 3);
+    let labels = smoothLabels(A.labels, A.AW, A.AH, k, smoothPasses);
+    // 最小色块面积：越细腻保留的块越小
+    const areaBase = (A.AW * A.AH) * 0.000055;   // 基准约 0.0055% 画幅
+    const minRegion = Math.max(2, Math.round(areaBase * detailK * detailK));
+    labels = mergeSmallRegions(labels, A.AW, A.AH, k, minRegion);
+
+    // ---- 每层代表色（在原图分辨率上统计，避免降采样偏色）----
     const sum = new Float64Array(k * 3), cnt = new Float64Array(k);
     const stepPx = Math.max(1, Math.floor(Math.sqrt(W * H / 240000)));
+    const labAt = (x, y) => {
+      const ax = clamp(Math.round(x / A.sxa), 0, A.AW - 1);
+      const ay = clamp(Math.round(y / A.sya), 0, A.AH - 1);
+      return labels[ay * A.AW + ax];
+    };
     for (let y = 0; y < H; y += stepPx) {
       for (let x = 0; x < W; x += stepPx) {
-        const l = P.sampleA(A.labels, x, y) | 0;
+        const l = labAt(x, y);
         if (l < 0 || l >= k) continue;
         const c = P.sampleRGB(x, y);
         sum[l * 3] += c[0]; sum[l * 3 + 1] += c[1]; sum[l * 3 + 2] += c[2]; cnt[l]++;
       }
     }
-    const palette = [];
-    // 先算原图整体饱和度，用它自适应决定「海报化」要提多少饱和：
-    // 本来就是低饱和的图（灰暗照片）提太少会一片死灰，提太多又会脏
+
+    // 原图整体饱和度：低饱和的图多提一点，否则提饱和度也没东西可提
     let satSum = 0, satN = 0;
-    for (let y = 0; y < H; y += Math.max(1, stepPx * 4)) {
-      for (let x = 0; x < W; x += Math.max(1, stepPx * 4)) {
+    const satStep = Math.max(1, stepPx * 4);
+    for (let y = 0; y < H; y += satStep) {
+      for (let x = 0; x < W; x += satStep) {
         const c = P.sampleRGB(x, y);
         const mx = Math.max(c[0], c[1], c[2]), mn = Math.min(c[0], c[1], c[2]);
         if (mx > 8) { satSum += (mx - mn) / mx; satN++; }
       }
     }
-    const avgSat = satN ? satSum / satN : 0.2;      // 0(灰) … 1(纯色)
-    // 灰图多提一点，彩色图少提一点，控制在 1.15–1.9 之间
+    const avgSat = satN ? satSum / satN : 0.2;
     const satGain = clamp(1.15 + (0.35 - Math.min(0.35, avgSat)) * 2.2, 1.15, 1.9);
     const conGain = 1.10;
 
-    /* 层内「代表色」：均值会被大量背景像素冲淡成灰，
-     * 所以按亮度加权取该层里最饱和的那批像素的中位色，色块才不至于发灰。 */
+    /* 层内代表色：均值被背景冲淡会发灰，取该层最饱和那批像素的中位色 */
     const hist = [];
     for (let i = 0; i < k; i++) hist.push([]);
     const hStep = Math.max(1, Math.floor(Math.sqrt(W * H / 90000)));
     for (let y = 0; y < H; y += hStep) {
       for (let x = 0; x < W; x += hStep) {
-        const l = P.sampleA(A.labels, x, y) | 0;
+        const l = labAt(x, y);
         if (l < 0 || l >= k) continue;
         const c = P.sampleRGB(x, y);
         const mx = Math.max(c[0], c[1], c[2]), mn = Math.min(c[0], c[1], c[2]);
-        const s = mx > 8 ? (mx - mn) / mx : 0;
-        hist[l].push(c[0], c[1], c[2], s);
+        hist[l].push(c[0], c[1], c[2], mx > 8 ? (mx - mn) / mx : 0);
       }
     }
 
+    const palette = [];
     for (let i = 0; i < k; i++) {
       const n = Math.max(1, cnt[i]);
       let r = sum[i * 3] / n, g = sum[i * 3 + 1] / n, b = sum[i * 3 + 2] / n;
 
-      // 取该层饱和度前 35% 的样本，求它们的中位色作为代表色
       const arr = hist[i];
       const cntS = arr.length / 4;
       if (cntS >= 12) {
@@ -1150,35 +1306,44 @@
         }
         rs.sort((x, y) => x - y); gs.sort((x, y) => x - y); bs.sort((x, y) => x - y);
         const mid = take >> 1;
-        // 代表色与均值做混合，既保留层的整体明度，又不被灰冲淡
         r = r * 0.35 + rs[mid] * 0.65;
         g = g * 0.35 + gs[mid] * 0.65;
         b = b * 0.35 + bs[mid] * 0.65;
       }
 
-      // 海报化：提饱和 + 轻微提对比，让色块更明确
       const gv = 0.299 * r + 0.587 * g + 0.114 * b;
       r = gv + (r - gv) * satGain; g = gv + (g - gv) * satGain; b = gv + (b - gv) * satGain;
       r = 128 + (r - 128) * conGain; g = 128 + (g - 128) * conGain; b = 128 + (b - 128) * conGain;
       palette.push([clamp(r, 0, 255), clamp(g, 0, 255), clamp(b, 0, 255)]);
     }
 
-    const minArea = Math.max(6, (A.AW * A.AH) * 0.000004);
+    // ---- 抽轮廓 ----
+    /* 简化容差：这是「细腻 vs 概括」最直观的旋钮。
+     * 容差大 → 轮廓被大量折线概括，色块边缘更「整」，尖刺消失；
+     * 容差小 → 贴着原边界走，细节多但可能带毛刺。 */
+    const eps = clamp(1.5 * base * detailK, 0.5, 4.5);
+    // 轮廓平滑遍数：越概括越圆滑
+    const smoothIters = clamp(Math.round(3.5 - 1.5 * detailK), 1, 4);
+    const minLoopArea = Math.max(2, minRegion * 0.5);
     const byLayer = [];
     for (let i = 0; i < k; i++) {
-      const loops = layerContours(A, i, minArea);
+      const loops = layerContours(A, i, minLoopArea, labels);
       loops.sort((a, b) => b.area - a.area);
       byLayer.push(loops);
     }
 
-    const mkFill = (loop, colorHex, alpha, tag) => {
-      const pts = simplify(loop.pts, Math.max(0.9, 1.1 * base));
+    const mkFill = (loop, colorHex, tag) => {
+      // 顺序：先平滑磨掉像素台阶 → 再按「相邻像素跨过半步」小幅外扩 → 最后简化压点数。
+      // 外扩只做半像素：再多就会让下层在交界处留下一圈可见暗边。
+      const sm = smoothLoop(loop.pts, smoothIters);
+      const grown = inflateLoop(sm, Math.max(0.15, 0.28 * base));
+      const pts = simplify(grown, eps);
       if (pts.length < 6) return null;
       let d = 'M' + pts[0].toFixed(1) + ' ' + pts[1].toFixed(1);
       for (let q = 1; q < pts.length / 2; q++) d += 'L' + pts[q * 2].toFixed(1) + ' ' + pts[q * 2 + 1].toFixed(1);
       d += 'Z';
       return {
-        d, c: colorHex, w: 0, a: alpha, kind: KIND_FILL,
+        d, c: colorHex, w: 0, a: 1, kind: KIND_FILL,
         len: +loop.len.toFixed(1), layer: 0, detail: 0, tag, area: loop.area,
       };
     };
@@ -1200,10 +1365,22 @@
     const names = ['base', 'shade', 'midtone', 'light', 'accent'];
     for (let bi = 0; bi < 5; bi++) {
       const out = [];
+      /* 第一层先铺一块满幅底色：轮廓是按分析分辨率抽的，边缘那一圈和
+       * 被合并掉的碎块可能没人覆盖，会露出底色形成空洞。先铺满就不会有洞。 */
+      if (bi === 0) {
+        const c0 = P.hex(palette[buckets[0].length ? buckets[0][0] : 0][0],
+                         palette[buckets[0].length ? buckets[0][0] : 0][1],
+                         palette[buckets[0].length ? buckets[0][0] : 0][2]);
+        const m = Math.max(W, H);
+        const dq = 'M' + (-m) + ' ' + (-m) + 'L' + (W + m) + ' ' + (-m) +
+                   'L' + (W + m) + ' ' + (H + m) + 'L' + (-m) + ' ' + (H + m) + 'Z';
+        out.push({ d: dq, c: c0, w: 0, a: 1, kind: KIND_FILL,
+                   len: 2 * (W + H), layer: 0, detail: 0, tag: 'bgfill', area: W * H });
+      }
       for (const li of buckets[bi]) {
         const col = P.hex(palette[li][0], palette[li][1], palette[li][2]);
         for (const loop of byLayer[li]) {
-          const f = mkFill(loop, col, 1.0, 'fill');
+          const f = mkFill(loop, col, 'fill');
           if (f) { f.layer = li; out.push(f); }
         }
       }
